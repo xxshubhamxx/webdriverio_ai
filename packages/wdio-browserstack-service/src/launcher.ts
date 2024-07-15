@@ -202,6 +202,13 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
         } catch (err: unknown) {
             PercyLogger.error(`Error while setting best platform for Percy snapshot at worker start ${err}`)
         }
+
+    }
+
+    async onPrepare (config?: Options.Testrunner, capabilities?: Capabilities.RemoteCapabilities) {
+        // // Send Funnel start request
+        await sendStart(this.browserStackConfig)
+
         const setupTcgConfigFile = async (tcgConfig: any) => {
             try {
                 // await setSharedStoreValue('tcgConfig', tcgConfig)
@@ -226,7 +233,7 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
                 const authResult = await aiSDK.BrowserstackHealing.init(this._config.key, this._config.user, TCG_URL, wdioBrowserStackServiceVersion)
                 if ('userId' in authResult) {
 
-                    this._updateCaps(caps, 'healingAuth', JSON.stringify(authResult))
+                    this._updateCaps(capabilities, 'healingAuth', JSON.stringify(authResult))
 
                     const { isAuthenticated, userId, groupId, sessionToken, isGroupAIEnabled, isHealingEnabled } = authResult
                     console.log(`isAuthenticated: ${isAuthenticated}, userId: ${userId}, groupId: ${groupId}, sessionToken: ${sessionToken}, isGroupAIEnabled: ${isGroupAIEnabled}, isHealingEnabled: ${isHealingEnabled}`)
@@ -234,7 +241,13 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
                     console.log(`Authenticated! User ID: ${authResult.userId}`)
                     await setupTcgConfigFile(authResult)
                     if (authResult.isAuthenticated && authResult.isHealingEnabled) {
-                        caps = aiSDK.BrowserstackHealing.initializeCapabilities(caps)
+                        let newCaps = capabilities
+                        if (Array.isArray(capabilities)) {
+                            newCaps = aiSDK.BrowserstackHealing.initializeCapabilities(capabilities[0] as Capabilities.DesiredCapabilities[])
+                        } else if (typeof capabilities === 'object') {
+                            newCaps = aiSDK.BrowserstackHealing.initializeCapabilities(capabilities)
+                        }
+                        capabilities = newCaps
                     }
                 } else if (this._options.selfHeal === true) {
                     console.log(`Healing Auth failed. Disabling healing for this session. Reason: ${authResult.message}`)
@@ -242,11 +255,6 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
 
             }
         }
-    }
-
-    async onPrepare (config?: Options.Testrunner, capabilities?: Capabilities.RemoteCapabilities) {
-        // // Send Funnel start request
-        await sendStart(this.browserStackConfig)
 
         /**
          * Upload app to BrowserStack if valid file path to app is given.
@@ -653,6 +661,7 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
     }
 
     _updateCaps(capabilities?: Capabilities.RemoteCapabilities, capType?: string, value?: string) {
+
         if (Array.isArray(capabilities)) {
             capabilities
                 .flatMap((c: Capabilities.DesiredCapabilities | Capabilities.MultiRemoteCapabilities) => {
@@ -687,30 +696,42 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
                             capability['browserstack.localIdentifier'] = value
                         }
                     } else if (capType === 'local') {
-                        capability['bstack:options'].local = true
+                        if (!capability['bstack:options']) {
+                            capability['bstack:options'] = { local: true }
+                        } else {
+                            capability['bstack:options'].local = true
+                        }
                     } else if (capType === 'app') {
                         capability['appium:app'] = value
                     } else if (capType === 'buildIdentifier') {
                         if (value) {
-                            capability['bstack:options'].buildIdentifier = value
-                        } else {
+                            if (!capability['bstack:options']) {
+                                capability['bstack:options'] = { buildIdentifier : value }
+                            } else {
+                                capability['bstack:options'].buildIdentifier = value
+                            }
+                        } else if (capability['bstack:options']) {
                             delete capability['bstack:options'].buildIdentifier
                         }
                     } else if (capType === 'localIdentifier') {
-                        capability['bstack:options'].localIdentifier = value
+                        if (!capability['bstack:options']) {
+                            capability['bstack:options'] = { localIdentifier: value }
+                        } else {
+                            capability['bstack:options'].localIdentifier = value
+                        }
                     } else if (capType === 'healingAuth') {
                         console.log('Adding healing auth to capabilities')
-                        if (capability['bstack:options']) {
-                            capability['bstack:options'].healingAuth = value
-                        } else {
+                        if (!capability['bstack:options']) {
                             capability['bstack:options'] = { healingAuth: value }
+                        } else {
+                            capability['bstack:options'].healingAuth = value
                         }
                     }
                 })
         } else if (typeof capabilities === 'object') {
             Object.entries(capabilities as Capabilities.MultiRemoteCapabilities).forEach(([, caps]) => {
 
-                if (!(caps.capabilities && (caps.capabilities as WebdriverIO.Capabilities)['bstack:options'])) {
+                if (caps.capabilities && (!(caps.capabilities as WebdriverIO.Capabilities)['bstack:options'])) {
                     const extensionCaps = Object.keys(caps.capabilities).filter((cap) => cap.includes(':'))
                     if (extensionCaps.length) {
                         if (capType === 'local') {
@@ -734,23 +755,43 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
                         (caps.capabilities as WebdriverIO.Capabilities)['browserstack.localIdentifier'] = value
                     }
                 } else if (capType === 'local'){
-                    (caps.capabilities as WebdriverIO.Capabilities)['bstack:options']!.local = true
+                    if (!caps.capabilities) {
+                        caps.capabilities = { 'bstack:options': { local: true } }
+                    } else {
+                        (caps.capabilities as WebdriverIO.Capabilities)['bstack:options']!.local = true
+                    }
                 } else if (capType === 'app') {
-                    (caps.capabilities as WebdriverIO.Capabilities)['appium:app'] = value
+                    if (!caps.capabilities) {
+                        caps.capabilities = { 'appium:app': value }
+                    } else {
+                        (caps.capabilities as WebdriverIO.Capabilities)['appium:app'] = value
+                    }
                 } else if (capType === 'buildIdentifier') {
                     if (value) {
-                        (caps.capabilities as WebdriverIO.Capabilities)['bstack:options']!.buildIdentifier = value
-                    } else {
+                        if (!caps.capabilities) {
+                            caps.capabilities = { 'bstack:options': { buildIdentifier: value } }
+                        } else {
+                            (caps.capabilities as WebdriverIO.Capabilities)['bstack:options']!.buildIdentifier = value
+                        }
+                    } else if (caps.capabilities && (caps.capabilities as WebdriverIO.Capabilities)['bstack:options']) {
                         delete (caps.capabilities as WebdriverIO.Capabilities)['bstack:options']!.buildIdentifier
                     }
                 } else if (capType === 'localIdentifier') {
-                    (caps.capabilities as WebdriverIO.Capabilities)['bstack:options']!.localIdentifier = value
-                } else if (capType === 'healingAuth') {
-                    const bstackOptions = (capabilities as WebdriverIO.Capabilities)['bstack:options']
-                    if (bstackOptions) {
-                        bstackOptions.healingAuth = value
+                    if (!caps.capabilities) {
+                        caps.capabilities = { 'bstack:options': { localIdentifier: value } }
                     } else {
-                        (capabilities as WebdriverIO.Capabilities)['bstack:options'] = { healingAuth: value }
+                        (caps.capabilities as WebdriverIO.Capabilities)['bstack:options']!.localIdentifier = value
+                    }
+                } else if (capType === 'healingAuth') {
+                    if (!caps.capabilities) {
+                        caps.capabilities = { 'bstack:options': { healingAuth: value } }
+                    } else {
+                        const bstackOptions = (capabilities as WebdriverIO.Capabilities)['bstack:options']
+                        if (bstackOptions) {
+                            bstackOptions.healingAuth = value
+                        } else {
+                            (capabilities as WebdriverIO.Capabilities)['bstack:options'] = { healingAuth: value }
+                        }
                     }
                 }
             })
