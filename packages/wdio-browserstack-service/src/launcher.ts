@@ -51,6 +51,15 @@ import BrowserStackConfig from './config.js'
 import { setupExitHandlers } from './exitHandler.js'
 import aiSDK from '@browserstack/ai-sdk-node'
 
+// async function setSharedStoreValue(key: string, value: any) {
+//     const { setValue } = await import('@wdio/shared-store-service')
+//     try {
+//         await setValue(key, value)
+//     } catch (err) {
+//         console.log(`Error while setting value in shared-store-service: ${err}`)
+//     }
+// }
+
 type BrowserstackLocal = BrowserstackLocalLauncher.Local & {
     pid?: number
     stop(callback: (err?: Error) => void): void
@@ -195,7 +204,8 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
         }
         const setupTcgConfigFile = async (tcgConfig: any) => {
             try {
-                const browserstackFolderPath: any = path.join('tmp')
+                // await setSharedStoreValue('tcgConfig', tcgConfig)
+                const browserstackFolderPath = path.join('tmp')
                 if (!fs.existsSync(browserstackFolderPath)){
                     fs.mkdirSync(browserstackFolderPath)
                 }
@@ -215,6 +225,8 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
             if (this._config.user && this._config.key) {
                 const authResult = await aiSDK.BrowserstackHealing.init(this._config.key, this._config.user, TCG_URL, wdioBrowserStackServiceVersion)
                 if ('userId' in authResult) {
+
+                    this._updateCaps(caps, 'healingAuth', JSON.stringify(authResult))
 
                     const { isAuthenticated, userId, groupId, sessionToken, isGroupAIEnabled, isHealingEnabled } = authResult
                     console.log(`isAuthenticated: ${isAuthenticated}, userId: ${userId}, groupId: ${groupId}, sessionToken: ${sessionToken}, isGroupAIEnabled: ${isGroupAIEnabled}, isHealingEnabled: ${isHealingEnabled}`)
@@ -650,6 +662,7 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
                     return c as (Capabilities.DesiredCapabilities)
                 })
                 .forEach((capability: Capabilities.DesiredCapabilities) => {
+
                     if (!capability['bstack:options']) {
                         const extensionCaps = Object.keys(capability).filter((cap) => cap.includes(':'))
                         if (extensionCaps.length) {
@@ -685,11 +698,19 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
                         }
                     } else if (capType === 'localIdentifier') {
                         capability['bstack:options'].localIdentifier = value
+                    } else if (capType === 'healingAuth') {
+                        console.log('Adding healing auth to capabilities')
+                        if (capability['bstack:options']) {
+                            capability['bstack:options'].healingAuth = value
+                        } else {
+                            capability['bstack:options'] = { healingAuth: value }
+                        }
                     }
                 })
         } else if (typeof capabilities === 'object') {
             Object.entries(capabilities as Capabilities.MultiRemoteCapabilities).forEach(([, caps]) => {
-                if (!(caps.capabilities as WebdriverIO.Capabilities)['bstack:options']) {
+
+                if (!(caps.capabilities && (caps.capabilities as WebdriverIO.Capabilities)['bstack:options'])) {
                     const extensionCaps = Object.keys(caps.capabilities).filter((cap) => cap.includes(':'))
                     if (extensionCaps.length) {
                         if (capType === 'local') {
@@ -724,6 +745,13 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
                     }
                 } else if (capType === 'localIdentifier') {
                     (caps.capabilities as WebdriverIO.Capabilities)['bstack:options']!.localIdentifier = value
+                } else if (capType === 'healingAuth') {
+                    const bstackOptions = (capabilities as WebdriverIO.Capabilities)['bstack:options']
+                    if (bstackOptions) {
+                        bstackOptions.healingAuth = value
+                    } else {
+                        (capabilities as WebdriverIO.Capabilities)['bstack:options'] = { healingAuth: value }
+                    }
                 }
             })
         } else {

@@ -68,8 +68,8 @@ declare module '@browserstack/ai-sdk-node' {
       ): Promise<{ selector: string; value: string } | null>;
 
       export function initializeCapabilities(
-        capabilities: Capabilities.RemoteCapability
-      ): Capabilities.RemoteCapability;
+        capabilities: Capabilities.RemoteCapabilities
+      ): Capabilities.RemoteCapabilities;
 
       export function getFirefoxAddonPath(): string;
     }

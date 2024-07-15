@@ -113,6 +113,15 @@ export default class BrowserstackService implements Services.ServiceInstance {
         // added to maintain backward compatibility with webdriverIO v5
         this._browser = browser ? browser : globalThis.browser
 
+        const authResult = (this._browser.capabilities as WebdriverIO.Capabilities)['bstack:options']?.healingAuth
+        if (authResult) {
+            const authInfo = JSON.parse(authResult)
+            console.log('AuthInfo Received in service.ts: ', authInfo)
+            // const sessionToken = authInfo.sessionToken
+            // const resp = await aiSDK.BrowserstackHealing.setToken(this._browser.sessionId, sessionToken, TCG_URL)
+            // console.log('Response from setToken: ', resp)
+        }
+
         const readTcgAuthConfigToGlobal = () => {
             const browserstackFolderPath = path.join('tmp')
             const tcgConfigPath = path.join(browserstackFolderPath, 'tcgConfig.json')

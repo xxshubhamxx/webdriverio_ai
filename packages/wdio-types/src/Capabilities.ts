@@ -1445,6 +1445,7 @@ export interface LambdaTestCapabilities {
 }
 
 export interface BrowserStackCapabilities {
+    healingAuth?: string
     browser?: string
     // eslint-disable-next-line
     browser_version?: string
