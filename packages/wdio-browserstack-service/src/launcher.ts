@@ -22,7 +22,8 @@ import {
     NOT_ALLOWED_KEYS_IN_CAPS, PERF_MEASUREMENT_ENV, RERUN_ENV, RERUN_TESTS_ENV,
     TESTOPS_BUILD_ID_ENV,
     VALID_APP_EXTENSION,
-    TCG_URL
+    TCG_URL,
+    SUPPORTED_BROWSERS_FOR_AI
 } from './constants.js'
 import {
     launchTestSession,
@@ -195,7 +196,7 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
             PercyLogger.error(`Error while setting best platform for Percy snapshot at worker start ${err}`)
         }
 
-        if (!isBrowserstackInfra(this._options)) {
+        if (!isBrowserstackInfra(this._config) && SUPPORTED_BROWSERS_FOR_AI.includes(caps.browserName) ) {
             const wdioBrowserStackServiceVersion = createRequire(import.meta.url)('../package.json').version
             if (this._config.user && this._config.key) {
 
