@@ -30,6 +30,8 @@ import axios from 'axios'
 
 async function getAuthToken(): Promise<string> {
 
+    //TODO: Change this once the AI auth flow is refactored
+
     const data = JSON.stringify({
         data: {
             userId: 374,

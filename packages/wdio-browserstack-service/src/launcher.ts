@@ -47,7 +47,7 @@ import { BStackLogger } from './bstackLogger.js'
 import { PercyLogger } from './Percy/PercyLogger.js'
 import { FileStream } from './fileStream.js'
 import type Percy from './Percy/Percy.js'
-import { sendStart, sendFinish } from './instrumentation/funnelInstrumentation.js'
+import { sendStart, sendFinish, handleHealingInstrumentation } from './instrumentation/funnelInstrumentation.js'
 import BrowserStackConfig from './config.js'
 import { setupExitHandlers } from './exitHandler.js'
 import aiSDK from '@browserstack/ai-sdk-node'
@@ -201,6 +201,9 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
             if (this._config.user && this._config.key) {
 
                 const authResult = await aiSDK.BrowserstackHealing.init(this._config.key, this._config.user, TCG_URL, wdioBrowserStackServiceVersion)
+
+                handleHealingInstrumentation(authResult, this.browserStackConfig, this._config.selfHeal, this._options)
+
                 process.env.TCG_AUTH_RESULT = JSON.stringify(authResult)
 
                 const installExtCondition = authResult.isAuthenticated === true && authResult.isHealingEnabled === true
