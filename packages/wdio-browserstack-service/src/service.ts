@@ -13,11 +13,14 @@ import {
     isBrowserstackSession,
     patchConsoleLogs,
     isBrowserstackInfra
+    patchConsoleLogs,
+    isBrowserstackInfra
 } from './util.js'
 import type { BrowserstackConfig, MultiRemoteAction, SessionResponse, TurboScaleSessionResponse, SelfHeal } from './types.js'
 import type { Pickle, Feature, ITestCaseHookParameter, CucumberHook } from './cucumber-types.js'
 import InsightsHandler from './insights-handler.js'
 import TestReporter from './reporter.js'
+import { DEFAULT_OPTIONS, PERF_MEASUREMENT_ENV, SUPPORTED_BROWSERS_FOR_AI, TCG_URL } from './constants.js'
 import { DEFAULT_OPTIONS, PERF_MEASUREMENT_ENV, SUPPORTED_BROWSERS_FOR_AI, TCG_URL } from './constants.js'
 import CrashReporter from './crash-reporter.js'
 import AccessibilityHandler from './accessibility-handler.js'
