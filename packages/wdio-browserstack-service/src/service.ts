@@ -154,7 +154,7 @@ export default class BrowserstackService implements Services.ServiceInstance {
 
             aiSDK.AISDK.configure({
                 domain: 'https://tcg-preprod.bsstag.com',
-                platform: 'desktop',
+                platform: this._isAppAutomate() ? 'mobile' : 'desktop',
             })
 
             function getFrameworkImpl(browser: any): NLToSteps.NLToStepsFrameworkImpl {
