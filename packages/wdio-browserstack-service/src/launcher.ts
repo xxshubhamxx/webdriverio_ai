@@ -16,13 +16,12 @@ import PerformanceTester from './performance-tester.js'
 
 import { startPercy, stopPercy, getBestPlatformForPercySnapshot } from './Percy/PercyHelper.js'
 
-import type { BrowserstackConfig, App, AppConfig, AppUploadResponse, UserConfig } from './types.js'
+import type { BrowserstackConfig, App, AppConfig, AppUploadResponse, UserConfig, BrowserstackOptions } from './types.js'
 import {
     BSTACK_SERVICE_VERSION,
     NOT_ALLOWED_KEYS_IN_CAPS, PERF_MEASUREMENT_ENV, RERUN_ENV, RERUN_TESTS_ENV,
     TESTOPS_BUILD_ID_ENV,
-    VALID_APP_EXTENSION,
-    TCG_URL
+    VALID_APP_EXTENSION
 } from './constants.js'
 import {
     launchTestSession,
@@ -31,7 +30,6 @@ import {
     stopBuildUpstream,
     getCiInfo,
     isBStackSession,
-    isBrowserstackInfra,
     isUndefined,
     isAccessibilityAutomationSession,
     stopAccessibilityTestRun,
@@ -40,6 +38,7 @@ import {
     getBrowserStackKey,
     uploadLogs,
     ObjectsAreEqual,
+    isValidCapsForHealing
 } from './util.js'
 import CrashReporter from './crash-reporter.js'
 import { BStackLogger } from './bstackLogger.js'
@@ -49,7 +48,7 @@ import type Percy from './Percy/Percy.js'
 import { sendStart, sendFinish } from './instrumentation/funnelInstrumentation.js'
 import BrowserStackConfig from './config.js'
 import { setupExitHandlers } from './exitHandler.js'
-import aiSDK from '@browserstack/ai-sdk-node'
+import AiHandler from './ai-handler.js'
 
 type BrowserstackLocal = BrowserstackLocalLauncher.Local & {
     pid?: number
@@ -68,7 +67,7 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
     private readonly browserStackConfig: BrowserStackConfig
 
     constructor (
-        private _options: BrowserstackConfig & Options.Testrunner,
+        private _options: BrowserstackConfig & BrowserstackOptions,
         capabilities: Capabilities.RemoteCapability,
         private _config: Options.Testrunner
     ) {
@@ -193,48 +192,35 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
         } catch (err: unknown) {
             PercyLogger.error(`Error while setting best platform for Percy snapshot at worker start ${err}`)
         }
-        const setupTcgConfigFile = async (tcgConfig: any) => {
-            try {
-                const browserstackFolderPath: any = path.join('tmp')
-                if (!fs.existsSync(browserstackFolderPath)){
-                    fs.mkdirSync(browserstackFolderPath)
-                }
-                const tcgAuthConfigPath: any = path.join(browserstackFolderPath, 'tcgConfig.json')
-                if (fs.existsSync(tcgAuthConfigPath)) {
-                    fs.unlinkSync(tcgAuthConfigPath)
-                }
-
-                fs.writeFileSync(tcgAuthConfigPath, JSON.stringify(tcgConfig))
-            } catch (err) {
-                console.log(`Cound not setup tcgAuth config file due to error: ${err}`)
-            }
-        }
-
-        if (!isBrowserstackInfra(this._options)) {
-            const wdioBrowserStackServiceVersion = (await import('../package.json', { assert: { type: 'json' } })).default.version
-            if (this._config.user && this._config.key) {
-                const authResult = await aiSDK.BrowserstackHealing.init(this._config.key, this._config.user, TCG_URL, wdioBrowserStackServiceVersion)
-                if ('userId' in authResult) {
-
-                    const { isAuthenticated, userId, groupId, sessionToken, isGroupAIEnabled, isHealingEnabled } = authResult
-                    console.log(`isAuthenticated: ${isAuthenticated}, userId: ${userId}, groupId: ${groupId}, sessionToken: ${sessionToken}, isGroupAIEnabled: ${isGroupAIEnabled}, isHealingEnabled: ${isHealingEnabled}`)
-
-                    console.log(`Authenticated! User ID: ${authResult.userId}`)
-                    await setupTcgConfigFile(authResult)
-                    if (authResult.isAuthenticated && authResult.isHealingEnabled) {
-                        caps = aiSDK.BrowserstackHealing.initializeCapabilities(caps)
-                    }
-                } else if (this._options.selfHeal === true) {
-                    console.log(`Healing Auth failed. Disabling healing for this session. Reason: ${authResult.message}`)
-                }
-
-            }
-        }
     }
 
-    async onPrepare (config?: Options.Testrunner, capabilities?: Capabilities.RemoteCapabilities) {
+    async onPrepare (config: Options.Testrunner, capabilities: Capabilities.RemoteCapabilities) {
         // // Send Funnel start request
         await sendStart(this.browserStackConfig)
+
+        // Setting up healing for those sessions where we don't add the service version capability as it indicates that the session is not being run on BrowserStack
+        if (!shouldAddServiceVersion(this._config, this._options.testObservability, capabilities as Capabilities.BrowserStackCapabilities)) {
+            try {
+                if ((capabilities as Capabilities.BrowserStackCapabilities).browserName) {
+                    capabilities = await AiHandler.setup(this._config, this.browserStackConfig, this._options, capabilities, false)
+                } else if ( Array.isArray(capabilities)){
+
+                    for (let i = 0; i < capabilities.length; i++) {
+                        if ((capabilities[i] as Capabilities.BrowserStackCapabilities).browserName) {
+                            capabilities[i] = await AiHandler.setup(this._config, this.browserStackConfig, this._options, capabilities[i], false)
+                        }
+                    }
+
+                } else if (isValidCapsForHealing(capabilities as any)) {
+                    // setting up healing in case capabilities.xyz.capabilities.browserName where xyz can be anything:
+                    capabilities = await AiHandler.setup(this._config, this.browserStackConfig, this._options, capabilities, true)
+                }
+            } catch (err) {
+                if (this._options.selfHeal === true) {
+                    BStackLogger.warn(`Error while setting up Browserstack healing Extension ${err}. Disabling healing for this session.`)
+                }
+            }
+        }
 
         /**
          * Upload app to BrowserStack if valid file path to app is given.
