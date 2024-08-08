@@ -11,9 +11,10 @@ import {
     isBrowserstackCapability,
     getParentSuiteName,
     isBrowserstackSession,
-    patchConsoleLogs
+    patchConsoleLogs,
+    shouldAddServiceVersion
 } from './util.js'
-import type { BrowserstackConfig, MultiRemoteAction, SessionResponse, TurboScaleSessionResponse, SelfHeal } from './types.js'
+import type { BrowserstackConfig, BrowserstackOptions, MultiRemoteAction, SessionResponse, TurboScaleSessionResponse } from './types.js'
 import type { Pickle, Feature, ITestCaseHookParameter, CucumberHook } from './cucumber-types.js'
 import InsightsHandler from './insights-handler.js'
 import TestReporter from './reporter.js'
@@ -68,7 +69,7 @@ export default class BrowserstackService implements Services.ServiceInstance {
     private _suiteTitle?: string
     private _suiteFile?: string
     private _fullTitle?: string
-    private _options: BrowserstackConfig & Options.Testrunner
+    private _options: BrowserstackConfig & BrowserstackOptions
     private _specsRan: boolean = false
     private _observability
     private _currentTest?: Frameworks.Test | ITestCaseHookParameter
@@ -82,7 +83,7 @@ export default class BrowserstackService implements Services.ServiceInstance {
     constructor (
         options: BrowserstackConfig & Options.Testrunner,
         private _caps: Capabilities.RemoteCapability,
-        private _config: Options.Testrunner & SelfHeal
+        private _config: Options.Testrunner
     ) {
         this._options = { ...DEFAULT_OPTIONS, ...options }
         // added to maintain backward compatibility with webdriverIO v5
@@ -192,8 +193,14 @@ export default class BrowserstackService implements Services.ServiceInstance {
         })
 
         // Healing Support:
-        if (!isBrowserstackSession(this._browser)) {
-            await AiHandler.selfHeal(this._config, caps, this._browser)
+        if (!shouldAddServiceVersion(this._config, this._options.testObservability, caps as any)) {
+            try {
+                await AiHandler.selfHeal(this._options, caps, this._browser)
+            } catch (err) {
+                if (this._options.selfHeal === true) {
+                    BStackLogger.warn(`Error while setting up self-healing: ${err}. Disabling healing for this session.`)
+                }
+            }
         }
 
         // Ensure capabilities are not null in case of multiremote

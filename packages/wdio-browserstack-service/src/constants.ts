@@ -70,7 +70,7 @@ export const LOG_KIND_USAGE_MAP = {
 
 export const FUNNEL_INSTRUMENTATION_URL = 'https://api.browserstack.com/sdk/v1/event'
 
-export const SUPPORTED_BROWSERS_FOR_AI = ['chrome', 'edge', 'firefox']
+export const SUPPORTED_BROWSERS_FOR_AI = ['chrome', 'microsoftedge', 'firefox']
 
 export const TCG_URL = 'https://tcg.browserstack.com'
 
@@ -83,6 +83,9 @@ export const TCG_INFO = {
 
 // To store the JWT token returned the session launch
 export const TESTOPS_JWT_ENV = 'BS_TESTOPS_JWT'
+
+// To store tcg auth result for selfHealing feature:
+export const BSTACK_TCG_AUTH_RESULT = 'BSTACK_TCG_AUTH_RESULT'
 
 // To store the setting of whether to send screenshots or not
 export const TESTOPS_SCREENSHOT_ENV = 'BS_TESTOPS_ALLOW_SCREENSHOTS'
