@@ -35,11 +35,11 @@
   "dependencies": {
     "@babel/core": "^7.18.0",
     "@tracerbench/trace-event": "^8.0.0",
-    "@types/node": "^20.1.0",
+    "@types/node": "^22.2.0",
     "@wdio/logger": "8.38.0",
     "@wdio/types": "8.39.0",
     "babel-plugin-istanbul": "^7.0.0",
-    "devtools-protocol": "^0.0.1335233",
+    "devtools-protocol": "^0.0.1340018",
     "istanbul-lib-coverage": "^3.2.0",
     "istanbul-lib-report": "^3.0.0",
     "istanbul-reports": "^3.1.4",
