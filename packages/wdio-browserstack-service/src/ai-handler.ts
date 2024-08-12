@@ -239,15 +239,6 @@ class AiHandler {
 
     async handleNLToStepsStart(userInput: string, browser: any) {
 
-        if ( browser.capabilities.browserName === 'firefox') {
-            await this.installFirefoxExtension(browser)
-        }
-
-        if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser.capabilities.browserName))) ) {
-            BStackLogger.warn('Browserstack AI is not supported for this browser')
-            return
-        }
-
         try {
             const out = await aiSDK.NLToSteps.start({
                 id: 'devqa-' + uuidv4(),
@@ -265,24 +256,13 @@ class AiHandler {
         }
     }
 
-    async testNLToStepsStart(userInput: string, browser: any, caps: Capabilities.RemoteCapability) {
+    async testNLToStepsStart(userInput: string, browser: any) {
 
-        const multiRemoteBrowsers = Object.keys(caps).filter(e => Object.keys(browser).includes(e))
-        if (multiRemoteBrowsers.length > 0) {
-            for (let i = 0; i < multiRemoteBrowsers.length; i++) {
-                (browser as any)[multiRemoteBrowsers[i]].addCommand('ai', async (userInput: string) => {
-
-                    if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser as any)[multiRemoteBrowsers[i]].capabilities.browserName))) {
-                        BStackLogger.warn('Browserstack AI is not supported for this browser')
-                        return
-                    }
-
-                    await this.handleNLToStepsStart(userInput, (browser as any)[multiRemoteBrowsers[i]])
-                })
-            }
-        } else {
-            await this.handleNLToStepsStart(userInput, browser)
+        if ( browser.capabilities.browserName === 'firefox') {
+            await this.installFirefoxExtension(browser)
         }
+
+        await this.handleNLToStepsStart(userInput, browser)
     }
 }
 
