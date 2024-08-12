@@ -3,8 +3,6 @@ import type { OptionsOfJSONResponseBody } from 'got'
 import type { Services, Capabilities, Options, Frameworks } from '@wdio/types'
 import PerformanceTester from './performance-tester.js'
 import aiSDK from '@browserstack/ai-sdk-node'
-import { NLToSteps } from '@browserstack/ai-sdk-node/lib/nltosteps'
-import { v4 as uuidv4 } from 'uuid'
 import {
     getBrowserDescription,
     getBrowserCapabilities,
@@ -18,7 +16,7 @@ import type { BrowserstackConfig, BrowserstackOptions, MultiRemoteAction, Sessio
 import type { Pickle, Feature, ITestCaseHookParameter, CucumberHook } from './cucumber-types.js'
 import InsightsHandler from './insights-handler.js'
 import TestReporter from './reporter.js'
-import { DEFAULT_OPTIONS, PERF_MEASUREMENT_ENV, SUPPORTED_BROWSERS_FOR_AI } from './constants.js'
+import { DEFAULT_OPTIONS, PERF_MEASUREMENT_ENV } from './constants.js'
 import CrashReporter from './crash-reporter.js'
 import AccessibilityHandler from './accessibility-handler.js'
 import { BStackLogger } from './bstackLogger.js'
@@ -27,38 +25,6 @@ import Listener from './testOps/listener.js'
 import { saveWorkerData } from './data-store.js'
 import UsageStats from './testOps/usageStats.js'
 import AiHandler from './ai-handler.js'
-
-import axios from 'axios'
-
-async function getAuthToken(): Promise<string> {
-
-    //TODO: Change this once the AI auth flow is refactored
-
-    const data = JSON.stringify({
-        data: {
-            userId: 374,
-            groupId: 384
-        }
-    })
-
-    const config = {
-        method: 'post',
-        url: 'https://tcg-preprod.bsstag.com/auth/generate-token',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': process.env.TCG_AUTH_TOKEN
-        },
-        data: data
-    }
-
-    try {
-        const response = await axios(config)
-        const token = response.data.data.jwt_token
-        return token
-    } catch (error) {
-        return ''
-    }
-}
 
 export default class BrowserstackService implements Services.ServiceInstance {
     private _sessionBaseUrl = 'https://api.browserstack.com/automate/sessions'
@@ -147,50 +113,39 @@ export default class BrowserstackService implements Services.ServiceInstance {
         this._browser = browser ? browser : globalThis.browser
 
         // Support for browser.ai:
+        // const multiRemoteBrowsers = Object.keys(caps).filter(e => Object.keys(browser).includes(e))
+        // if (multiRemoteBrowsers.length > 0) {
+        //     for (let i = 0; i < multiRemoteBrowsers.length; i++) {
+        //         (this._browser as any)[multiRemoteBrowsers[i]].addCommand('ai', async (userInput: string) => {
+
+        //             if (!(SUPPORTED_BROWSERS_FOR_AI.includes((this._browser as any)[multiRemoteBrowsers[i]].capabilities.browserName))) {
+        //                 BStackLogger.warn('Browserstack AI is not supported for this browser')
+        //                 return
+        //             }
+
+        //             aiSDK.AISDK.configure({
+        //                 domain: 'https://tcg.browserstack.com',
+        //                 platform: this._isAppAutomate() ? 'mobile' : 'desktop',
+        //             })
+        //             await AiHandler.testNLToStepsStart(userInput, (this._browser as any)[multiRemoteBrowsers[i]])
+        //         })
+        //     }
+        // } else {
+
         this._browser.addCommand('ai', async (userInput: string) => {
 
-            if (!(SUPPORTED_BROWSERS_FOR_AI.includes((caps as any).browserName))) {
-                BStackLogger.warn('Browserstack AI is not supported for this browser')
-                return
-            }
+            // if (!(SUPPORTED_BROWSERS_FOR_AI.includes((this._browser?.capabilities as WebdriverIO.Capabilities).browserName as string))) {
+            //     BStackLogger.warn('Browserstack AI is not supported for this browser')
+            //     return
+            // }
 
             aiSDK.AISDK.configure({
-                domain: 'https://tcg-preprod.bsstag.com',
+                domain: 'https://tcg.browserstack.com',
                 platform: this._isAppAutomate() ? 'mobile' : 'desktop',
             })
-
-            function getFrameworkImpl(browser: any): NLToSteps.NLToStepsFrameworkImpl {
-                return {
-                    executeScript: async (script: (...data: any) => any, args: any[]) => {
-                        return await browser.execute(script, ...args)
-                    },
-                    getBrowser() {
-                        return browser.capabilities.browserName || 'chrome'
-                    }
-                }
-            }
-
-            async function testNLToStepsStart() {
-                try {
-                    const out = await NLToSteps.start({
-                        id: 'devqa-' + uuidv4(),
-                        objective: userInput,
-                        waitCallback: async (waitAction) => {
-                            console.log('Wait action called:', waitAction)
-                            return { waitAction, done: true }
-                        },
-                        authMethod: getAuthToken,
-                        frameworkImplementation: getFrameworkImpl(browser)
-                    })
-
-                    console.log('NLToSteps.start output:', out)
-                } catch (error) {
-                    console.error('Error in NLToSteps.start:', error)
-                }
-            }
-
-            await testNLToStepsStart()
+            await AiHandler.testNLToStepsStart(userInput, browser, caps)
         })
+        // }
 
         // Healing Support:
         if (!shouldAddServiceVersion(this._config, this._options.testObservability, caps as any)) {

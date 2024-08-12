@@ -96,32 +96,6 @@ describe('AiHandler', () => {
             expect(updatedCaps['goog:chromeOptions'].extensions).toEqual([mockExtension])
         })
 
-        it('should not update capabilities if authentication failed', async () => {
-            const authResult = {
-                isAuthenticated: false,
-                message: 'Authentication failed'
-            } as any
-
-            const caps = { browserName: 'chrome' }
-            const updatedCaps = await AiHandler.updateCaps(authResult, config, caps)
-
-            expect(updatedCaps).toEqual(caps)
-        })
-
-        it('should not update capabilities if selfHeal is false', async () => {
-            const authResult = {
-                isAuthenticated: false,
-                message: 'Authentication failed'
-            } as any
-
-            config.selfHeal = false
-
-            const caps = { browserName: 'chrome' }
-            const updatedCaps = await AiHandler.updateCaps(authResult, config, caps)
-
-            expect(updatedCaps).toEqual(caps)
-        })
-
         it('should handle array of capabilities', async () => {
             const authResult = {
                 isAuthenticated: true,
@@ -330,18 +304,6 @@ describe('AiHandler', () => {
     describe('setup', () => {
         it('should authenticate user and update capabilities for supported browser', async () => {
             const caps = { browserName: 'chrome' }
-            const mockAuthResult = {
-                isAuthenticated: true,
-                sessionToken: 'mock-session-token',
-                defaultLogDataEnabled: true,
-                isHealingEnabled: true,
-                groupId: 123123,
-                userId: 342423,
-                isGroupAIEnabled: true,
-            }
-
-            const authenticateUserSpy = vi.spyOn(AiHandler, 'authenticateUser')
-                .mockResolvedValue(mockAuthResult as any)
             const handleHealingInstrumentationSpy = vi.spyOn(funnelInstrumentation, 'handleHealingInstrumentation')
             const updateCapsSpy = vi.spyOn(AiHandler, 'updateCaps')
                 .mockResolvedValue({ ...caps, 'goog:chromeOptions': { extensions: ['mock-extension'] } })
@@ -353,49 +315,46 @@ describe('AiHandler', () => {
             const emptyObj = {} as any
             await AiHandler.setup(config, emptyObj, emptyObj, caps, false)
 
-            expect(authenticateUserSpy).toHaveBeenCalledTimes(1)
             expect(handleHealingInstrumentationSpy).toHaveBeenCalledTimes(1)
             expect(updateCapsSpy).toHaveBeenCalledTimes(1)
         })
 
-        it('should skip setup if accessKey is not present', async () => {
+        it('should not update caps if accessKey is not present', async () => {
             config.key = ''
             const caps = { browserName: 'chrome' }
 
             const authenticateUserSpy = vi.spyOn(AiHandler, 'authenticateUser')
-            const handleHealingInstrumentationSpy = vi.spyOn(funnelInstrumentation, 'handleHealingInstrumentation')
-            const updateCapsSpy = vi.spyOn(AiHandler, 'updateCaps')
+            // const handleHealingInstrumentationSpy = vi.spyOn(funnelInstrumentation, 'handleHealingInstrumentation')
+            // const updateCapsSpy = vi.spyOn(AiHandler, 'updateCaps')
 
             const emptyObj = {} as any
             vi.stubEnv('BROWSERSTACK_ACCESS_KEY', '')
             const updatedCaps = await AiHandler.setup(config, emptyObj, emptyObj, caps, false)
             expect(authenticateUserSpy).not.toHaveBeenCalled()
-            expect(handleHealingInstrumentationSpy).not.toHaveBeenCalled()
-            expect(updateCapsSpy).not.toHaveBeenCalled()
+            // expect(handleHealingInstrumentationSpy).not.toHaveBeenCalled()
+            // expect(updateCapsSpy).not.toHaveBeenCalled()
             expect(updatedCaps).toEqual(caps) // Expect caps to remain unchanged
         })
 
-        it('should skip setup if userName is not present', async () => {
+        it('should not update caps if userName is not present', async () => {
             config.user = ''
             const caps = { browserName: 'chrome' }
 
             const authenticateUserSpy = vi.spyOn(AiHandler, 'authenticateUser')
-            const handleHealingInstrumentationSpy = vi.spyOn(funnelInstrumentation, 'handleHealingInstrumentation')
-            const updateCapsSpy = vi.spyOn(AiHandler, 'updateCaps')
 
             const emptyObj = {} as any
             vi.stubEnv('BROWSERSTACK_USERNAME', '')
             const updatedCaps = await AiHandler.setup(config, emptyObj, emptyObj, caps, false)
             expect(authenticateUserSpy).not.toHaveBeenCalled()
-            expect(handleHealingInstrumentationSpy).not.toHaveBeenCalled()
-            expect(updateCapsSpy).not.toHaveBeenCalled()
+            // expect(handleHealingInstrumentationSpy).not.toHaveBeenCalled()
+            // expect(updateCapsSpy).not.toHaveBeenCalled()
             expect(updatedCaps).toEqual(caps) // Expect caps to remain unchanged
         })
 
         it('should handle errors in setup', async () => {
             const caps = { browserName: 'chrome' }
-            const authenticateUserSpy = vi.spyOn(AiHandler, 'authenticateUser')
-                .mockRejectedValue(new Error('Authentication failed'))
+            // const authenticateUserSpy = vi.spyOn(AiHandler, 'authenticateUser')
+            //     .mockRejectedValue(new Error('Authentication failed'))
 
             const warnSpy = vi.spyOn(bstackLogger.BStackLogger, 'warn')
 
@@ -403,8 +362,8 @@ describe('AiHandler', () => {
             const options = { selfHeal: true } as any
             const updatedCaps = await AiHandler.setup(config, emptyObj, options, caps, false)
 
-            expect(authenticateUserSpy).toHaveBeenCalledTimes(1)
-            expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Error while initiliazing Browserstack healing Extension'))
+            // expect(authenticateUserSpy).toHaveBeenCalledTimes(1)
+            expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Authentication Failed. Disabling Healing for this session.'))
             expect(updatedCaps).toEqual(caps)
         })
     })

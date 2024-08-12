@@ -5,11 +5,12 @@ import aiSDK from '@browserstack/ai-sdk-node'
 import { BStackLogger } from './bstackLogger.js'
 import { TCG_URL, TCG_INFO, SUPPORTED_BROWSERS_FOR_AI, BSTACK_SERVICE_VERSION, BSTACK_TCG_AUTH_RESULT } from './constants.js'
 import { handleHealingInstrumentation } from './instrumentation/funnelInstrumentation.js'
+import { v4 as uuidv4 } from 'uuid'
 
 import type { Capabilities } from '@wdio/types'
 import type BrowserStackConfig from './config.js'
 import type { Options } from '@wdio/types'
-import type { BrowserstackHealing } from '@browserstack/ai-sdk-node'
+import type { BrowserstackHealing, NLToSteps } from '@browserstack/ai-sdk-node'
 import { getBrowserStackUserAndKey, isBrowserstackInfra } from './util.js'
 import type { BrowserstackOptions } from './types.js'
 
@@ -30,17 +31,12 @@ class AiHandler {
         options: BrowserstackOptions,
         caps: Array<Capabilities.RemoteCapability> | Capabilities.RemoteCapability
     ) {
-        const installExtCondition = authResult.isAuthenticated === true && (authResult.defaultLogDataEnabled === true || options.selfHeal === true)
-        if (installExtCondition){
-            if (Array.isArray(caps)) {
-                const newCaps= aiSDK.BrowserstackHealing.initializeCapabilities(caps[0])
-                caps[0] = newCaps
-            } else if (typeof caps === 'object') {
-                caps = aiSDK.BrowserstackHealing.initializeCapabilities(caps)
-            }
-        } else if (options.selfHeal === true) {
-            const healingWarnMessage = (authResult as aiSDK.BrowserstackHealing.InitErrorResponse).message
-            BStackLogger.warn(`Healing Auth failed. Disabling healing for this session. Reason: ${healingWarnMessage}`)
+
+        if (Array.isArray(caps)) {
+            const newCaps= aiSDK.BrowserstackHealing.initializeCapabilities(caps[0])
+            caps[0] = newCaps
+        } else if (typeof caps === 'object') {
+            caps = aiSDK.BrowserstackHealing.initializeCapabilities(caps)
         }
 
         return caps
@@ -151,19 +147,20 @@ class AiHandler {
         isMultiremote: boolean
     ) {
         try {
-            const innerConfig = getBrowserStackUserAndKey(config, options)
-            if (innerConfig?.user && innerConfig.key) {
-                const authResult = await this.authenticateUser(innerConfig.user, innerConfig.key)
-                process.env[BSTACK_TCG_AUTH_RESULT] = JSON.stringify(authResult)
-                if (!isMultiremote && SUPPORTED_BROWSERS_FOR_AI.includes(caps?.browserName?.toLowerCase())) {
+            // const innerConfig = getBrowserStackUserAndKey(config, options)
+            // if (innerConfig?.user && innerConfig.key) {
+            // const authResult = await this.authenticateUser(innerConfig.user, innerConfig.key)
+            // process.env[BSTACK_TCG_AUTH_RESULT] = JSON.stringify(authResult)
+            const authResult = JSON.parse(process.env[BSTACK_TCG_AUTH_RESULT] || '{}')
+            if (!isMultiremote && SUPPORTED_BROWSERS_FOR_AI.includes(caps?.browserName?.toLowerCase())) {
 
-                    handleHealingInstrumentation(authResult, browserStackConfig, options.selfHeal)
-                    this.updateCaps(authResult, options, caps)
+                handleHealingInstrumentation(authResult, browserStackConfig, options.selfHeal)
+                this.updateCaps(authResult, options, caps)
 
-                } else if (isMultiremote) {
-                    this.handleMultiRemoteSetup(authResult, config, browserStackConfig, options, caps)
-                }
+            } else if (isMultiremote) {
+                this.handleMultiRemoteSetup(authResult, config, browserStackConfig, options, caps)
             }
+            // }
 
         } catch (err) {
             if (options.selfHeal === true) {
@@ -217,6 +214,74 @@ class AiHandler {
             if (options.selfHeal === true) {
                 BStackLogger.warn(`Error while setting up self-healing: ${err}. Disabling healing for this session.`)
             }
+        }
+    }
+
+    async getAuthToken(): Promise<string> {
+
+        const authResult = JSON.parse(process.env[BSTACK_TCG_AUTH_RESULT] || '{}')
+        if (authResult.isAuthenticated) {
+            return authResult.sessionToken
+        }
+        return ''
+    }
+
+    getFrameworkImpl(browser: any): NLToSteps.NLToStepsFrameworkImpl {
+        return {
+            executeScript: async (script: (...data: any) => any, args: any[]) => {
+                return await browser.execute(script, ...args)
+            },
+            getBrowser() {
+                return browser.capabilities.browserName || 'chrome'
+            }
+        }
+    }
+
+    async handleNLToStepsStart(userInput: string, browser: any) {
+
+        if ( browser.capabilities.browserName === 'firefox') {
+            await this.installFirefoxExtension(browser)
+        }
+
+        if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser.capabilities.browserName))) ) {
+            BStackLogger.warn('Browserstack AI is not supported for this browser')
+            return
+        }
+
+        try {
+            const out = await aiSDK.NLToSteps.start({
+                id: 'devqa-' + uuidv4(),
+                objective: userInput,
+                waitCallback: async (waitAction: NLToSteps.NLToStepsWaitAction) => {
+                    return { waitAction }
+                },
+                authMethod: this.getAuthToken,
+                frameworkImplementation: this.getFrameworkImpl(browser)
+            })
+
+            console.log('NLToSteps.start output:', out)
+        } catch (error) {
+            console.error('Error in NLToSteps.start:', error)
+        }
+    }
+
+    async testNLToStepsStart(userInput: string, browser: any, caps: Capabilities.RemoteCapability) {
+
+        const multiRemoteBrowsers = Object.keys(caps).filter(e => Object.keys(browser).includes(e))
+        if (multiRemoteBrowsers.length > 0) {
+            for (let i = 0; i < multiRemoteBrowsers.length; i++) {
+                (browser as any)[multiRemoteBrowsers[i]].addCommand('ai', async (userInput: string) => {
+
+                    if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser as any)[multiRemoteBrowsers[i]].capabilities.browserName))) {
+                        BStackLogger.warn('Browserstack AI is not supported for this browser')
+                        return
+                    }
+
+                    await this.handleNLToStepsStart(userInput, (browser as any)[multiRemoteBrowsers[i]])
+                })
+            }
+        } else {
+            await this.handleNLToStepsStart(userInput, browser)
         }
     }
 }

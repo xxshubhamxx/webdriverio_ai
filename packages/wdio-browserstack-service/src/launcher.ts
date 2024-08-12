@@ -19,6 +19,7 @@ import { startPercy, stopPercy, getBestPlatformForPercySnapshot } from './Percy/
 import type { BrowserstackConfig, App, AppConfig, AppUploadResponse, UserConfig, BrowserstackOptions } from './types.js'
 import {
     BSTACK_SERVICE_VERSION,
+    BSTACK_TCG_AUTH_RESULT,
     NOT_ALLOWED_KEYS_IN_CAPS, PERF_MEASUREMENT_ENV, RERUN_ENV, RERUN_TESTS_ENV,
     TESTOPS_BUILD_ID_ENV,
     VALID_APP_EXTENSION
@@ -38,7 +39,8 @@ import {
     getBrowserStackKey,
     uploadLogs,
     ObjectsAreEqual,
-    isValidCapsForHealing
+    isValidCapsForHealing,
+    getBrowserStackUserAndKey
 } from './util.js'
 import CrashReporter from './crash-reporter.js'
 import { BStackLogger } from './bstackLogger.js'
@@ -197,6 +199,13 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
     async onPrepare (config: Options.Testrunner, capabilities: Capabilities.RemoteCapabilities) {
         // // Send Funnel start request
         await sendStart(this.browserStackConfig)
+
+        // The initial AI-SDK init call:
+        const innerConfig = getBrowserStackUserAndKey(this._config, this._options)
+        if (innerConfig?.user && innerConfig.key) {
+            const authResult = await AiHandler.authenticateUser(innerConfig.user, innerConfig.key)
+            process.env[BSTACK_TCG_AUTH_RESULT] = JSON.stringify(authResult)
+        }
 
         // Setting up healing for those sessions where we don't add the service version capability as it indicates that the session is not being run on BrowserStack
         if (!shouldAddServiceVersion(this._config, this._options.testObservability, capabilities as Capabilities.BrowserStackCapabilities)) {
