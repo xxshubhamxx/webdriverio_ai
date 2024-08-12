@@ -232,7 +232,7 @@ class AiHandler {
                 return await browser.execute(script, ...args)
             },
             getBrowser() {
-                return browser.capabilities.browserName || 'chrome'
+                return browser.capabilities.browserName
             }
         }
     }
@@ -259,7 +259,12 @@ class AiHandler {
                 frameworkImplementation: this.getFrameworkImpl(browser)
             })
 
-            console.log('NLToSteps.start output:', out)
+            if (out.state === 'SUCCESS') {
+                BStackLogger.info(`The query has been successfully executed in the ${browser.capabilities.browserName} browser`)
+            } else {
+                BStackLogger.warn(`The query could not be executed in the ${browser.capabilities.browserName} browser`)
+            }
+
         } catch (error) {
             console.error('Error in NLToSteps.start:', error)
         }
@@ -270,17 +275,18 @@ class AiHandler {
         const multiRemoteBrowsers = Object.keys(caps).filter(e => Object.keys(browser).includes(e))
         if (multiRemoteBrowsers.length > 0) {
             for (let i = 0; i < multiRemoteBrowsers.length; i++) {
-                (browser as any)[multiRemoteBrowsers[i]].addCommand('ai', async (userInput: string) => {
+                if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser as any)[multiRemoteBrowsers[i]].capabilities.browserName))) {
+                    BStackLogger.warn('Browserstack AI is not supported for this browser')
+                    return
+                }
 
-                    if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser as any)[multiRemoteBrowsers[i]].capabilities.browserName))) {
-                        BStackLogger.warn('Browserstack AI is not supported for this browser')
-                        return
-                    }
-
-                    await this.handleNLToStepsStart(userInput, (browser as any)[multiRemoteBrowsers[i]])
-                })
+                await this.handleNLToStepsStart(userInput, (browser as any)[multiRemoteBrowsers[i]])
             }
         } else {
+            if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser.capabilities.browserName))) ) {
+                BStackLogger.warn('Browserstack AI is not supported for this browser')
+                return
+            }
             await this.handleNLToStepsStart(userInput, browser)
         }
     }

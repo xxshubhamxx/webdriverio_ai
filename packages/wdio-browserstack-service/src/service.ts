@@ -112,32 +112,12 @@ export default class BrowserstackService implements Services.ServiceInstance {
         // added to maintain backward compatibility with webdriverIO v5
         this._browser = browser ? browser : globalThis.browser
 
-        // Support for browser.ai:
-        // const multiRemoteBrowsers = Object.keys(caps).filter(e => Object.keys(browser).includes(e))
-        // if (multiRemoteBrowsers.length > 0) {
-        //     for (let i = 0; i < multiRemoteBrowsers.length; i++) {
-        //         (this._browser as any)[multiRemoteBrowsers[i]].addCommand('ai', async (userInput: string) => {
-
-        //             if (!(SUPPORTED_BROWSERS_FOR_AI.includes((this._browser as any)[multiRemoteBrowsers[i]].capabilities.browserName))) {
-        //                 BStackLogger.warn('Browserstack AI is not supported for this browser')
-        //                 return
-        //             }
-
-        //             aiSDK.AISDK.configure({
-        //                 domain: 'https://tcg.browserstack.com',
-        //                 platform: this._isAppAutomate() ? 'mobile' : 'desktop',
-        //             })
-        //             await AiHandler.testNLToStepsStart(userInput, (this._browser as any)[multiRemoteBrowsers[i]])
-        //         })
-        //     }
-        // } else {
-
         this._browser.addCommand('ai', async (userInput: string) => {
 
-            // if (!(SUPPORTED_BROWSERS_FOR_AI.includes((this._browser?.capabilities as WebdriverIO.Capabilities).browserName as string))) {
-            //     BStackLogger.warn('Browserstack AI is not supported for this browser')
-            //     return
-            // }
+            if (userInput.trim() === '') {
+                BStackLogger.warn('Please provide a valid input to the AI command')
+                return
+            }
 
             aiSDK.AISDK.configure({
                 domain: 'https://tcg.browserstack.com',
@@ -145,7 +125,6 @@ export default class BrowserstackService implements Services.ServiceInstance {
             })
             await AiHandler.testNLToStepsStart(userInput, browser, caps)
         })
-        // }
 
         // Healing Support:
         if (!shouldAddServiceVersion(this._config, this._options.testObservability, caps as any)) {
