@@ -173,6 +173,10 @@ class AiHandler {
 
     async handleSelfHeal(options: BrowserstackOptions, browser: WebdriverIO.Browser) {
 
+        if ((browser.capabilities as Capabilities.BrowserStackCapabilities)?.browserName?.toLowerCase() === 'firefox') {
+            await this.installFirefoxExtension(browser)
+        }
+
         if (SUPPORTED_BROWSERS_FOR_AI.includes((browser.capabilities as Capabilities.BrowserStackCapabilities)?.browserName?.toLowerCase() as string)) {
             const authInfo = this.authResult as BrowserstackHealing.InitSuccessResponse
 
@@ -185,10 +189,6 @@ class AiHandler {
 
             if (isAuthenticated && (defaultLogDataEnabled === true || options.selfHeal === true)) {
                 await this.setToken(browser.sessionId, sessionToken)
-
-                if ((browser.capabilities as Capabilities.BrowserStackCapabilities).browserName === 'firefox') {
-                    await this.installFirefoxExtension(browser)
-                }
 
                 browser.overwriteCommand('findElement' as any, async (orginalFunc: (arg0: string, arg1: string) => any, using: string, value: string) => {
                     return await this.handleHealing(orginalFunc, using, value, browser, options)
@@ -239,10 +239,6 @@ class AiHandler {
 
     async handleNLToStepsStart(userInput: string, browser: any) {
 
-        if ( browser.capabilities.browserName === 'firefox') {
-            await this.installFirefoxExtension(browser)
-        }
-
         if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser.capabilities.browserName))) ) {
             BStackLogger.warn('Browserstack AI is not supported for this browser')
             return
@@ -253,7 +249,9 @@ class AiHandler {
                 id: 'devqa-' + uuidv4(),
                 objective: userInput,
                 waitCallback: async (waitAction: NLToSteps.NLToStepsWaitAction) => {
-                    return { waitAction }
+                    console.log('-------------------------------------')
+                    console.log('waitAction:', waitAction)
+                    console.log('-------------------------------------')
                 },
                 authMethod: this.getAuthToken,
                 frameworkImplementation: this.getFrameworkImpl(browser)

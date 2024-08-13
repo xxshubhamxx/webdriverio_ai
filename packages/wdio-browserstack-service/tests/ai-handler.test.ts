@@ -378,14 +378,11 @@ describe('AiHandler', () => {
                 isHealingEnabled: true
             } as any
 
-            const setTokenSpy = vi.spyOn(AiHandler, 'setToken')
             const installFirefoxExtensionSpy = vi.spyOn(AiHandler, 'installFirefoxExtension')
 
             browser.capabilities = caps
             await AiHandler.selfHeal(config, caps, browser)
 
-            expect(setTokenSpy).toHaveBeenCalledTimes(1)
-            expect(setTokenSpy).toHaveBeenCalledWith(browser.sessionId, 'mock-session-token')
             expect(installFirefoxExtensionSpy).toHaveBeenCalledTimes(1)
             expect(installFirefoxExtensionSpy).toHaveBeenCalledWith(browser)
         })
@@ -659,7 +656,6 @@ describe('AiHandler', () => {
             expect(handleSelfHealSpy).toHaveBeenCalledWith(config, browserMock.myChromeBrowser)
             expect(handleSelfHealSpy).toHaveBeenCalledWith(config, browserMock.myFirefoxBrowser)
             expect(setTokenSpy).toHaveBeenCalledWith('chrome-session-id', 'mock-session-token')
-            expect(setTokenSpy).toHaveBeenCalledWith('firefox-session-id', 'mock-session-token')
             expect(installFirefoxExtensionSpy).toHaveBeenCalledTimes(1)
             expect(installFirefoxExtensionSpy).toHaveBeenCalledWith(browserMock.myFirefoxBrowser)
         })

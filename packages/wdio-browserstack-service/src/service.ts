@@ -112,6 +112,17 @@ export default class BrowserstackService implements Services.ServiceInstance {
         // added to maintain backward compatibility with webdriverIO v5
         this._browser = browser ? browser : globalThis.browser
 
+        // Healing Support:
+        if (!shouldAddServiceVersion(this._config, this._options.testObservability, caps as any)) {
+            try {
+                await AiHandler.selfHeal(this._options, caps, this._browser)
+            } catch (err) {
+                if (this._options.selfHeal === true) {
+                    BStackLogger.warn(`Error while setting up self-healing: ${err}. Disabling healing for this session.`)
+                }
+            }
+        }
+
         this._browser.addCommand('ai', async (userInput: string) => {
 
             if (userInput.trim() === '') {
@@ -125,17 +136,6 @@ export default class BrowserstackService implements Services.ServiceInstance {
             })
             await AiHandler.testNLToStepsStart(userInput, browser, caps)
         })
-
-        // Healing Support:
-        if (!shouldAddServiceVersion(this._config, this._options.testObservability, caps as any)) {
-            try {
-                await AiHandler.selfHeal(this._options, caps, this._browser)
-            } catch (err) {
-                if (this._options.selfHeal === true) {
-                    BStackLogger.warn(`Error while setting up self-healing: ${err}. Disabling healing for this session.`)
-                }
-            }
-        }
 
         // Ensure capabilities are not null in case of multiremote
 
