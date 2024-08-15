@@ -79,6 +79,19 @@ export const TCG_INFO = {
     tcgUrl: TCG_URL,
 }
 
+export const HUB_TCG_MAP: { [key: string]: string }  = {
+    'hub-use.browserstack.com': 'https://tcg.browserstack.com',
+    'hub-usw.browserstack.com': 'https://tcg-usw.browserstack.com',
+    'hub-euw.browserstack.com': 'https://tcg-euw.browserstack.com',
+    'hub-aps.browserstack.com': 'https://tcg-aps.browserstack.com',
+    'hub-apse.browserstack.com': 'https://tcg-aps.browserstack.com',
+    'hub-use-only.browserstack.com': 'https://tcg.browserstack.com',
+    'hub-usw-only.browserstack.com': 'https://tcg-usw.browserstack.com',
+    'hub-euw-only.browserstack.com': 'https://tcg-euw.browserstack.com',
+    'hub-aps-only.browserstack.com': 'https://tcg-aps.browserstack.com',
+    'hub-apse-only.browserstack.com': 'https://tcg-aps.browserstack.com'
+}
+
 // Env variables - Define all the env variable constants over here
 
 // To store the JWT token returned the session launch

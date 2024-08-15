@@ -112,10 +112,21 @@ export default class BrowserstackService implements Services.ServiceInstance {
         // added to maintain backward compatibility with webdriverIO v5
         this._browser = browser ? browser : globalThis.browser
 
+        const tcgUrl = await AiHandler.getTcgUrl() as string
+
+        if (!tcgUrl) {
+            BStackLogger.warn('Something went wrong. Disabling the AI features')
+        }
+
+        aiSDK.AISDK.configure({
+            domain: tcgUrl,
+            platform: this._isAppAutomate() ? 'mobile' : 'desktop',
+        })
+
         // Healing Support:
-        if (!shouldAddServiceVersion(this._config, this._options.testObservability, caps as any)) {
+        if (!shouldAddServiceVersion(this._config, this._options.testObservability, caps as any) && tcgUrl) {
             try {
-                await AiHandler.selfHeal(this._options, caps, this._browser)
+                await AiHandler.selfHeal(this._options, caps, this._browser, tcgUrl)
             } catch (err) {
                 if (this._options.selfHeal === true) {
                     BStackLogger.warn(`Error while setting up self-healing: ${err}. Disabling healing for this session.`)
@@ -130,10 +141,10 @@ export default class BrowserstackService implements Services.ServiceInstance {
                 return
             }
 
-            aiSDK.AISDK.configure({
-                domain: 'https://tcg.browserstack.com',
-                platform: this._isAppAutomate() ? 'mobile' : 'desktop',
-            })
+            if (!tcgUrl) {
+                return
+            }
+
             await AiHandler.testNLToStepsStart(userInput, browser, caps)
         })
 

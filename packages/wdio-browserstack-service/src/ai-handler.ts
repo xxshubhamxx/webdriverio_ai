@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import url from 'node:url'
 import aiSDK from '@browserstack/ai-sdk-node'
 import { BStackLogger } from './bstackLogger.js'
-import { TCG_URL, TCG_INFO, SUPPORTED_BROWSERS_FOR_AI, BSTACK_SERVICE_VERSION, BSTACK_TCG_AUTH_RESULT } from './constants.js'
+import { TCG_INFO, SUPPORTED_BROWSERS_FOR_AI, BSTACK_SERVICE_VERSION, BSTACK_TCG_AUTH_RESULT, HUB_TCG_MAP } from './constants.js'
 import { handleHealingInstrumentation } from './instrumentation/funnelInstrumentation.js'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -11,7 +11,7 @@ import type { Capabilities } from '@wdio/types'
 import type BrowserStackConfig from './config.js'
 import type { Options } from '@wdio/types'
 import type { BrowserstackHealing, NLToSteps } from '@browserstack/ai-sdk-node'
-import { getBrowserStackUserAndKey, isBrowserstackInfra } from './util.js'
+import { getBrowserStackUserAndKey, getNextHub, isBrowserstackInfra } from './util.js'
 import type { BrowserstackOptions } from './types.js'
 
 class AiHandler {
@@ -23,7 +23,8 @@ class AiHandler {
     }
 
     async authenticateUser(user: string, key: string) {
-        return await aiSDK.BrowserstackHealing.init(key, user, TCG_URL, this.wdioBstackVersion)
+        const tcgUrl = await this.getTcgUrl() as string
+        return await aiSDK.BrowserstackHealing.init(key, user, tcgUrl, this.wdioBstackVersion)
     }
 
     updateCaps(
@@ -42,8 +43,8 @@ class AiHandler {
         return caps
     }
 
-    async setToken(sessionId: string, sessionToken: string){
-        await aiSDK.BrowserstackHealing.setToken(sessionId, sessionToken, TCG_URL)
+    async setToken(sessionId: string, sessionToken: string, tcgUrl: string){
+        await aiSDK.BrowserstackHealing.setToken(sessionId, sessionToken, tcgUrl)
     }
 
     async installFirefoxExtension(browser: WebdriverIO.Browser){
@@ -53,7 +54,7 @@ class AiHandler {
         await browser.installAddOn(extFile.toString('base64'), true)
     }
 
-    async handleHealing(orginalFunc: (arg0: string, arg1: string) => any, using: string, value: string, browser: WebdriverIO.Browser, options: BrowserstackOptions){
+    async handleHealing(orginalFunc: (arg0: string, arg1: string) => any, using: string, value: string, browser: WebdriverIO.Browser, options: BrowserstackOptions, tcgUrl: string){
         const sessionId = browser.sessionId
 
         // a utility function to escape single and double quotes
@@ -87,7 +88,7 @@ class AiHandler {
                 const script = await aiSDK.BrowserstackHealing.healFailure(locatorType, locatorValue, undefined, undefined, this.authResult.userId, this.authResult.groupId, sessionId, undefined, undefined, this.authResult.isGroupAIEnabled, tcgDetails)
                 if (script) {
                     await browser.execute(script)
-                    const tcgData = await aiSDK.BrowserstackHealing.pollResult(TCG_URL, sessionId, this.authResult.sessionToken)
+                    const tcgData = await aiSDK.BrowserstackHealing.pollResult(tcgUrl, sessionId, this.authResult.sessionToken)
                     if (tcgData && tcgData.selector && tcgData.value){
                         const healedResult = await orginalFunc(tcgData.selector, tcgData.value)
                         BStackLogger.info('Healing worked, element found: ' + tcgData.selector + ': ' + tcgData.value)
@@ -171,7 +172,7 @@ class AiHandler {
         return caps
     }
 
-    async handleSelfHeal(options: BrowserstackOptions, browser: WebdriverIO.Browser) {
+    async handleSelfHeal(options: BrowserstackOptions, browser: WebdriverIO.Browser, tcgUrl: string) {
 
         if ((browser.capabilities as Capabilities.BrowserStackCapabilities)?.browserName?.toLowerCase() === 'firefox') {
             await this.installFirefoxExtension(browser)
@@ -188,32 +189,46 @@ class AiHandler {
             const { isAuthenticated, sessionToken, defaultLogDataEnabled } = authInfo
 
             if (isAuthenticated && (defaultLogDataEnabled === true || options.selfHeal === true)) {
-                await this.setToken(browser.sessionId, sessionToken)
+                await this.setToken(browser.sessionId, sessionToken, tcgUrl)
 
                 browser.overwriteCommand('findElement' as any, async (orginalFunc: (arg0: string, arg1: string) => any, using: string, value: string) => {
-                    return await this.handleHealing(orginalFunc, using, value, browser, options)
+                    return await this.handleHealing(orginalFunc, using, value, browser, options, tcgUrl)
                 })
             }
         }
     }
 
-    async selfHeal(options: BrowserstackOptions, caps: Capabilities.RemoteCapability, browser: WebdriverIO.Browser) {
+    async selfHeal(options: BrowserstackOptions, caps: Capabilities.RemoteCapability, browser: WebdriverIO.Browser, tcgUrl: string) {
         try {
 
             const multiRemoteBrowsers = Object.keys(caps).filter(e => Object.keys(browser).includes(e))
             if (multiRemoteBrowsers.length > 0) {
                 for (let i = 0; i < multiRemoteBrowsers.length; i++) {
                     const remoteBrowser = (browser as any)[multiRemoteBrowsers[i]]
-                    await this.handleSelfHeal(options, remoteBrowser)
+                    await this.handleSelfHeal(options, remoteBrowser, tcgUrl)
                 }
             } else {
-                await this.handleSelfHeal(options, browser)
+                await this.handleSelfHeal(options, browser, tcgUrl)
             }
 
         } catch (err) {
             if (options.selfHeal === true) {
                 BStackLogger.warn(`Error while setting up self-healing: ${err}. Disabling healing for this session.`)
             }
+        }
+    }
+
+    async getTcgUrl(): Promise<string | null>  {
+        try {
+            const nextHub: string | null = await getNextHub()
+
+            if (nextHub && HUB_TCG_MAP[nextHub]) {
+                return HUB_TCG_MAP[nextHub]
+            }
+            return null
+
+        } catch (error) {
+            return null
         }
     }
 
@@ -249,11 +264,11 @@ class AiHandler {
                 id: 'devqa-' + uuidv4(),
                 objective: userInput,
                 waitCallback: async (waitAction: NLToSteps.NLToStepsWaitAction) => {
-                    console.log('-------------------------------------')
                     console.log('waitAction:', waitAction)
-                    console.log('-------------------------------------')
+                    return true
                 },
                 authMethod: this.getAuthToken,
+                waitAfterActions: true,
                 frameworkImplementation: this.getFrameworkImpl(browser)
             })
 

@@ -1415,3 +1415,24 @@ export const isValidCapsForHealing = (caps: { [key: string]: Options.Testrunner 
     // Check if there are any capabilities and if at least one has a browser name
     return capValues.length > 0 && capValues.some(hasBrowserName)
 }
+
+export const getNextHub = async (): Promise<string | null> => {
+    const url = 'https://hub.browserstack.com/next_hubs'
+
+    try {
+        const response = await got.get(url, {
+            agent: DEFAULT_REQUEST_CONFIG.agent,
+            responseType: 'json'
+        })
+
+        const { hubs } = response.body as { hubs: string[] }
+
+        if (hubs && hubs.length > 0) {
+            return hubs[0]
+        }
+        return null
+
+    } catch (error) {
+        return null
+    }
+}
