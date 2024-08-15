@@ -278,6 +278,8 @@ class AiHandler {
                 BStackLogger.warn(`The query could not be executed in the ${browser.capabilities.browserName} browser`)
             }
 
+            return out
+
         } catch (error) {
             console.error('Error in NLToSteps.start:', error)
         }
@@ -287,21 +289,23 @@ class AiHandler {
 
         const multiRemoteBrowsers = Object.keys(caps).filter(e => Object.keys(browser).includes(e))
         if (multiRemoteBrowsers.length > 0) {
+            const result = multiRemoteBrowsers.map(() => ({ state: 'FAILED' }))
+
             for (let i = 0; i < multiRemoteBrowsers.length; i++) {
                 if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser as any)[multiRemoteBrowsers[i]].capabilities.browserName))) {
                     BStackLogger.warn('Browserstack AI is not supported for this browser')
                     return
                 }
-
-                await this.handleNLToStepsStart(userInput, (browser as any)[multiRemoteBrowsers[i]])
+                result[i] = await this.handleNLToStepsStart(userInput, (browser as any)[multiRemoteBrowsers[i]])
             }
-        } else {
-            if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser.capabilities.browserName))) ) {
-                BStackLogger.warn('Browserstack AI is not supported for this browser')
-                return
-            }
-            await this.handleNLToStepsStart(userInput, browser)
+            return result
         }
+
+        if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser.capabilities.browserName))) ) {
+            BStackLogger.warn('Browserstack AI is not supported for this browser')
+            return
+        }
+        return await this.handleNLToStepsStart(userInput, browser)
     }
 }
 

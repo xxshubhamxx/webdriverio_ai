@@ -145,7 +145,7 @@ export default class BrowserstackService implements Services.ServiceInstance {
                 return
             }
 
-            await AiHandler.testNLToStepsStart(userInput, browser, caps)
+            return await AiHandler.testNLToStepsStart(userInput, browser, caps)
         })
 
         // Ensure capabilities are not null in case of multiremote
