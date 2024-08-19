@@ -116,37 +116,24 @@ export default class BrowserstackService implements Services.ServiceInstance {
 
         if (!tcgUrl) {
             BStackLogger.warn('Something went wrong. Disabling the AI features')
-        }
+        } else {
 
-        aiSDK.AISDK.configure({
-            domain: tcgUrl,
-            platform: this._isAppAutomate() ? 'mobile' : 'desktop',
-        })
+            aiSDK.AISDK.configure({
+                domain: tcgUrl,
+                platform: this._isAppAutomate() ? 'mobile' : 'desktop',
+            })
 
-        // Healing Support:
-        if (!shouldAddServiceVersion(this._config, this._options.testObservability, caps as any) && tcgUrl) {
-            try {
-                await AiHandler.selfHeal(this._options, caps, this._browser, tcgUrl)
-            } catch (err) {
-                if (this._options.selfHeal === true) {
-                    BStackLogger.warn(`Error while setting up self-healing: ${err}. Disabling healing for this session.`)
+            // Healing Support:
+            if (!shouldAddServiceVersion(this._config, this._options.testObservability, caps as any) && tcgUrl) {
+                try {
+                    await AiHandler.selfHeal(this._options, caps, this._browser, tcgUrl)
+                } catch (err) {
+                    if (this._options.selfHeal === true) {
+                        BStackLogger.warn(`Error while setting up self-healing: ${err}. Disabling healing for this session.`)
+                    }
                 }
             }
         }
-
-        this._browser.addCommand('ai', async (userInput: string) => {
-
-            if (userInput.trim() === '') {
-                BStackLogger.warn('Please provide a valid input to the AI command')
-                return
-            }
-
-            if (!tcgUrl) {
-                return
-            }
-
-            return await AiHandler.testNLToStepsStart(userInput, browser, caps)
-        })
 
         // Ensure capabilities are not null in case of multiremote
 
@@ -239,6 +226,20 @@ export default class BrowserstackService implements Services.ServiceInstance {
                 }
             }
         }
+
+        this._browser.addCommand('ai', async (userInput: string) => {
+
+            if (userInput.trim() === '') {
+                BStackLogger.warn('Please provide a valid input to the AI command')
+                return
+            }
+
+            if (!tcgUrl) {
+                return
+            }
+
+            return await AiHandler.testNLToStepsStart(userInput, browser, caps, this._accessibilityHandler)
+        })
 
         return await this._printSessionURL()
     }

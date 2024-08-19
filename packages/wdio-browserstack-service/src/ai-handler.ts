@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import url from 'node:url'
 import aiSDK from '@browserstack/ai-sdk-node'
 import { BStackLogger } from './bstackLogger.js'
-import { TCG_INFO, SUPPORTED_BROWSERS_FOR_AI, BSTACK_SERVICE_VERSION, BSTACK_TCG_AUTH_RESULT, HUB_TCG_MAP } from './constants.js'
+import { TCG_INFO, SUPPORTED_BROWSERS_FOR_AI, BSTACK_SERVICE_VERSION, BSTACK_TCG_AUTH_RESULT, HUB_TCG_MAP, TIMEOUT_DURATION } from './constants.js'
 import { handleHealingInstrumentation } from './instrumentation/funnelInstrumentation.js'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -13,6 +13,7 @@ import type { Options } from '@wdio/types'
 import type { BrowserstackHealing, NLToSteps } from '@browserstack/ai-sdk-node'
 import { getBrowserStackUserAndKey, getNextHub, isBrowserstackInfra } from './util.js'
 import type { BrowserstackOptions } from './types.js'
+import type AccessibilityHandler from './accessibility-handler.js'
 
 class AiHandler {
     authResult: BrowserstackHealing.InitSuccessResponse | BrowserstackHealing.InitErrorResponse
@@ -252,19 +253,38 @@ class AiHandler {
         }
     }
 
-    async handleNLToStepsStart(userInput: string, browser: any) {
+    async handleNLToStepsStart(userInput: string, browser: any, _accessibilityHandler?: AccessibilityHandler) {
 
-        if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser.capabilities.browserName))) ) {
+        if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser.capabilities.browserName)))) {
             BStackLogger.warn('Browserstack AI is not supported for this browser')
             return
         }
 
         try {
+            let timeoutTimer: NodeJS.Timeout
+
+            const createTimeoutPromise = () => new Promise((_, reject) => {
+                timeoutTimer = setTimeout(() => reject(new Error(
+                    `BrowserStack AI execution timed out after ${TIMEOUT_DURATION / 1000} seconds.`
+                )), TIMEOUT_DURATION)
+            })
+
+            await createTimeoutPromise() // Initial timeout promise
+
             const out = await aiSDK.NLToSteps.start({
                 id: 'devqa-' + uuidv4(),
                 objective: userInput,
                 waitCallback: async (waitAction: NLToSteps.NLToStepsWaitAction) => {
                     console.log('waitAction:', waitAction)
+
+                    clearTimeout(timeoutTimer)
+                    await createTimeoutPromise()
+
+                    if (_accessibilityHandler) {
+                        await _accessibilityHandler.validateAccessibility()
+                        // TODO: Add accessibility commandsToWrap logic here
+                    }
+
                     return true
                 },
                 authMethod: this.getAuthToken,
@@ -280,12 +300,12 @@ class AiHandler {
 
             return out
 
-        } catch (error) {
-            console.error('Error in NLToSteps.start:', error)
+        } catch (error: any) {
+            BStackLogger.error('Error in NLToSteps.start: ' + (error.message || error))
         }
     }
 
-    async testNLToStepsStart(userInput: string, browser: any, caps: Capabilities.RemoteCapability) {
+    async testNLToStepsStart(userInput: string, browser: any, caps: Capabilities.RemoteCapability, _accessibilityHandler?: AccessibilityHandler) {
 
         const multiRemoteBrowsers = Object.keys(caps).filter(e => Object.keys(browser).includes(e))
         if (multiRemoteBrowsers.length > 0) {
@@ -296,7 +316,7 @@ class AiHandler {
                     BStackLogger.warn('Browserstack AI is not supported for this browser')
                     return
                 }
-                result[i] = await this.handleNLToStepsStart(userInput, (browser as any)[multiRemoteBrowsers[i]])
+                result[i] = await this.handleNLToStepsStart(userInput, (browser as any)[multiRemoteBrowsers[i]], _accessibilityHandler)
             }
             return result
         }
@@ -305,7 +325,7 @@ class AiHandler {
             BStackLogger.warn('Browserstack AI is not supported for this browser')
             return
         }
-        return await this.handleNLToStepsStart(userInput, browser)
+        return await this.handleNLToStepsStart(userInput, browser, _accessibilityHandler)
     }
 }
 
