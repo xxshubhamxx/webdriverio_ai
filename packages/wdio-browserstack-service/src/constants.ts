@@ -72,13 +72,6 @@ export const FUNNEL_INSTRUMENTATION_URL = 'https://api.browserstack.com/sdk/v1/e
 
 export const SUPPORTED_BROWSERS_FOR_AI = ['chrome', 'microsoftedge', 'firefox']
 
-export const TCG_URL = 'https://tcg.browserstack.com'
-
-export const TCG_INFO = {
-    tcgRegion: 'use',
-    tcgUrl: TCG_URL,
-}
-
 export const HUB_TCG_MAP: { [key: string]: string }  = {
     'hub-use.browserstack.com': 'https://tcg.browserstack.com',
     'hub-usw.browserstack.com': 'https://tcg.browserstack.com',
@@ -101,6 +94,9 @@ export const TESTOPS_JWT_ENV = 'BS_TESTOPS_JWT'
 
 // To store tcg auth result for selfHealing feature:
 export const BSTACK_TCG_AUTH_RESULT = 'BSTACK_TCG_AUTH_RESULT'
+
+// To store the TCG URL for the AI features
+export const BSTACK_TCG_URL = 'BSTACK_TCG_URL'
 
 // To store the setting of whether to send screenshots or not
 export const TESTOPS_SCREENSHOT_ENV = 'BS_TESTOPS_ALLOW_SCREENSHOTS'

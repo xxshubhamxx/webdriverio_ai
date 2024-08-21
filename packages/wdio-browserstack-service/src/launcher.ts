@@ -225,9 +225,7 @@ export default class BrowserstackLauncherService implements Services.ServiceInst
                     capabilities = await AiHandler.setup(this._config, this.browserStackConfig, this._options, capabilities, true)
                 }
             } catch (err) {
-                if (this._options.selfHeal === true) {
-                    BStackLogger.warn(`Error while setting up Browserstack healing Extension ${err}. Disabling healing for this session.`)
-                }
+                BStackLogger.warn(`Error while setting up Browserstack AI Extension ${(err)}. Disabling AI Features for this session.`)
             }
         }
 

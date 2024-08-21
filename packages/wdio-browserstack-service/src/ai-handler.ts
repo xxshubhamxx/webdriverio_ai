@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import url from 'node:url'
 import aiSDK from '@browserstack/ai-sdk-node'
 import { BStackLogger } from './bstackLogger.js'
-import { TCG_INFO, SUPPORTED_BROWSERS_FOR_AI, BSTACK_SERVICE_VERSION, BSTACK_TCG_AUTH_RESULT, HUB_TCG_MAP, TIMEOUT_DURATION } from './constants.js'
+import { SUPPORTED_BROWSERS_FOR_AI, BSTACK_SERVICE_VERSION, BSTACK_TCG_AUTH_RESULT, HUB_TCG_MAP, BSTACK_TCG_URL, TIMEOUT_DURATION } from './constants.js'
 import { handleHealingInstrumentation } from './instrumentation/funnelInstrumentation.js'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -60,12 +60,13 @@ class AiHandler {
 
         // a utility function to escape single and double quotes
         const escapeString = (str: string) => str.replace(/'/g, "\\'").replace(/"/g, '\\"')
+        const tcgRegion = (tcgUrl.includes('.') && tcgUrl.includes('-')) ? tcgUrl.split('.')[0].split('-')[1] : 'use'
 
         const tcgDetails = escapeString(JSON.stringify({
-            region: TCG_INFO.tcgRegion,
+            region: tcgRegion,
             tcgUrls: {
-                [TCG_INFO.tcgRegion]: {
-                    endpoint: TCG_INFO.tcgUrl.split('://')[1]
+                [tcgRegion]: {
+                    endpoint: tcgUrl.split('://')[1]
                 }
             }
         }))
@@ -221,11 +222,19 @@ class AiHandler {
 
     async getTcgUrl(): Promise<string | null>  {
         try {
+
+            if (process.env[BSTACK_TCG_URL]) {
+                return process.env[BSTACK_TCG_URL] as string
+            }
+
             const nextHub: string | null = await getNextHub()
 
             if (nextHub && HUB_TCG_MAP[nextHub]) {
-                return HUB_TCG_MAP[nextHub]
+                const tcgUrl = HUB_TCG_MAP[nextHub]
+                process.env[BSTACK_TCG_URL] = tcgUrl
+                return tcgUrl
             }
+
             return null
 
         } catch (error) {
@@ -254,31 +263,33 @@ class AiHandler {
     }
 
     async handleNLToStepsStart(userInput: string, browser: any, _accessibilityHandler?: AccessibilityHandler) {
-
         if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser.capabilities.browserName)))) {
             BStackLogger.warn('Browserstack AI is not supported for this browser')
             return
         }
 
         try {
-            let timeoutTimer: NodeJS.Timeout
+            let timeoutTimer: NodeJS.Timeout | undefined
 
-            const createTimeoutPromise = () => new Promise((_, reject) => {
-                timeoutTimer = setTimeout(() => reject(new Error(
-                    `BrowserStack AI execution timed out after ${TIMEOUT_DURATION / 1000} seconds.`
-                )), TIMEOUT_DURATION)
+            const createTimeoutPromise = () => new Promise<never>(() => {
+                timeoutTimer = setTimeout(() => {
+                    throw new Error(
+                        `BrowserStack AI execution timed out after ${TIMEOUT_DURATION / 1000} seconds.`
+                    )
+                }, TIMEOUT_DURATION)
             })
 
-            await createTimeoutPromise() // Initial timeout promise
-
-            const out = await aiSDK.NLToSteps.start({
-                id: 'devqa-' + uuidv4(),
+            const nlToStepsPromise = aiSDK.NLToSteps.start({
+                id: 'webdriverio-' + uuidv4(),
                 objective: userInput,
                 waitCallback: async (waitAction: NLToSteps.NLToStepsWaitAction) => {
-                    console.log('waitAction:', waitAction)
+                    console.log('waitAction:', JSON.stringify(waitAction))
 
-                    clearTimeout(timeoutTimer)
-                    await createTimeoutPromise()
+                    if (timeoutTimer) {
+                        clearTimeout(timeoutTimer)
+                    }
+
+                    createTimeoutPromise()
 
                     if (_accessibilityHandler) {
                         await _accessibilityHandler.validateAccessibility()
@@ -292,16 +303,25 @@ class AiHandler {
                 frameworkImplementation: this.getFrameworkImpl(browser)
             })
 
+            const out = await Promise.race([
+                nlToStepsPromise,
+                createTimeoutPromise()
+            ])
+
+            if (timeoutTimer) {
+                clearTimeout(timeoutTimer)
+            }
+
             if (out.state === 'SUCCESS') {
                 BStackLogger.info(`The query has been successfully executed in the ${browser.capabilities.browserName} browser`)
             } else {
-                BStackLogger.warn(`The query could not be executed in the ${browser.capabilities.browserName} browser`)
+                BStackLogger.warn(`The query could not be executed in the ${browser.capabilities.browserName} browser. Reason: ${out.message}`)
             }
 
             return out
 
         } catch (error: any) {
-            BStackLogger.error('Error in NLToSteps.start: ' + (error.message || error))
+            BStackLogger.error('Error in browser.ai: ' + (error.message || error))
         }
     }
 
