@@ -42,6 +42,7 @@ beforeEach(() => {
     browser = {
         execute: vi.fn(),
         on: vi.fn(),
+        addCommand: vi.fn(),
         sessionId: sessionId,
         config: {},
         capabilities: {

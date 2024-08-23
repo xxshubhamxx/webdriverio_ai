@@ -11,14 +11,14 @@ import { BSTACK_SERVICE_VERSION, FUNNEL_INSTRUMENTATION_URL } from '../constants
 import { getDataFromWorkers, removeWorkersDataDir } from '../data-store.js'
 import type { BrowserstackHealing } from '@browserstack/ai-sdk-node'
 
-async function fireFunnelTestEvent(eventType: string, config: BrowserStackConfig) {
+async function fireFunnelTestEvent(eventType: string, config: BrowserStackConfig, reason?: string) {
     if (!config.userName || !config.accessKey) {
         BStackLogger.debug('username/accesskey not passed')
         return
     }
 
     try {
-        const data = buildEventData(eventType, config)
+        const data = buildEventData(eventType, config, reason)
         await fireFunnelRequest(data)
         BStackLogger.debug('Funnel event success')
         if (eventType === 'SDKTestSuccessful') {
@@ -92,7 +92,7 @@ function getProductMap(config: BrowserStackConfig): any {
     }
 }
 
-function buildEventData(eventType: string, config: BrowserStackConfig): any {
+function buildEventData(eventType: string, config: BrowserStackConfig, reason?: string): any {
     const eventProperties: any = {
         // Framework Details
         language_framework: getLanguageFramework(config.framework),
@@ -126,6 +126,10 @@ function buildEventData(eventType: string, config: BrowserStackConfig): any {
                 signal: config.killSignal
             }
         }
+    }
+
+    if (reason) {
+        eventProperties.reason = reason
     }
 
     return {
@@ -203,6 +207,14 @@ function handleInitializationFailure(status: number, config: BrowserStackConfig,
 
     if (isSelfHealEnabled) {
         BStackLogger.warn('Authentication Failed. Healing will be disabled for this session.')
+    }
+}
+
+export function nlToStepsInstrumentation(config: BrowserStackConfig, resason?: string) {
+    if (resason === 'timeout') {
+        fireFunnelTestEvent('SDKTestNLToStepsTimeout', config)
+    } else {
+        fireFunnelTestEvent('SDKTestNLToStepsFailed', config, resason)
     }
 }
 
