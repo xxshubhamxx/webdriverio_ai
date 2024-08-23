@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import url from 'node:url'
 import aiSDK from '@browserstack/ai-sdk-node'
 import { BStackLogger } from './bstackLogger.js'
-import { SUPPORTED_BROWSERS_FOR_AI, BSTACK_SERVICE_VERSION, BSTACK_TCG_AUTH_RESULT, HUB_TCG_MAP, BSTACK_TCG_URL, TIMEOUT_DURATION } from './constants.js'
+import { BSTACK_SERVICE_VERSION, BSTACK_TCG_AUTH_RESULT, HUB_TCG_MAP, BSTACK_TCG_URL, TIMEOUT_DURATION } from './constants.js'
 import { handleHealingInstrumentation } from './instrumentation/funnelInstrumentation.js'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -11,9 +11,8 @@ import type { Capabilities } from '@wdio/types'
 import type BrowserStackConfig from './config.js'
 import type { Options } from '@wdio/types'
 import type { BrowserstackHealing, NLToSteps } from '@browserstack/ai-sdk-node'
-import { getBrowserStackUserAndKey, getNextHub, isBrowserstackInfra } from './util.js'
+import { getBrowserStackUserAndKey, getNextHub, isBrowserstackInfra, hasDeviceName } from './util.js'
 import type { BrowserstackOptions } from './types.js'
-import type AccessibilityHandler from './accessibility-handler.js'
 
 class AiHandler {
     authResult: BrowserstackHealing.InitSuccessResponse | BrowserstackHealing.InitErrorResponse
@@ -34,11 +33,13 @@ class AiHandler {
         caps: Array<Capabilities.RemoteCapability> | Capabilities.RemoteCapability
     ) {
 
-        if (Array.isArray(caps)) {
+        if (Array.isArray(caps) && !hasDeviceName(caps[0])) {
             const newCaps= aiSDK.BrowserstackHealing.initializeCapabilities(caps[0])
             caps[0] = newCaps
-        } else if (typeof caps === 'object') {
+        } else if (typeof caps === 'object' && !hasDeviceName(caps)) {
             caps = aiSDK.BrowserstackHealing.initializeCapabilities(caps)
+        } else if (options.selfHeal === true && hasDeviceName(caps)) {
+            BStackLogger.warn('Self-healing is not supported for mobile devices')
         }
 
         return caps
@@ -116,9 +117,13 @@ class AiHandler {
         caps: any,
         browser: string
     ) {
+        const browserDetails = {
+            browserName: caps[browser]?.capabilities?.browserName?.toLowerCase() as string,
+            version: caps[browser]?.capabilities?.browserVersion as string
+        }
         if ( caps[browser].capabilities &&
             !(isBrowserstackInfra(caps[browser])) &&
-            SUPPORTED_BROWSERS_FOR_AI.includes(caps[browser]?.capabilities?.browserName?.toLowerCase())
+            aiSDK.AISDK.checkExtensionCompatibility(browserDetails)
         ) {
             const innerConfig = getBrowserStackUserAndKey(config, options)
             if (innerConfig?.user && innerConfig.key) {
@@ -155,11 +160,16 @@ class AiHandler {
             // const authResult = await this.authenticateUser(innerConfig.user, innerConfig.key)
             // process.env[BSTACK_TCG_AUTH_RESULT] = JSON.stringify(authResult)
             const authResult = JSON.parse(process.env[BSTACK_TCG_AUTH_RESULT] || '{}')
-            if (!isMultiremote && SUPPORTED_BROWSERS_FOR_AI.includes(caps?.browserName?.toLowerCase())) {
 
-                handleHealingInstrumentation(authResult, browserStackConfig, options.selfHeal)
-                this.updateCaps(authResult, options, caps)
-
+            if (!isMultiremote) {
+                const browserDetails = {
+                    browserName: caps?.browserName?.toLowerCase() as string,
+                    version: caps?.browserVersion as string
+                }
+                if (aiSDK.AISDK.checkExtensionCompatibility(browserDetails)) {
+                    handleHealingInstrumentation(authResult, browserStackConfig, options.selfHeal)
+                    this.updateCaps(authResult, options, caps)
+                }
             } else if (isMultiremote) {
                 this.handleMultiRemoteSetup(authResult, config, browserStackConfig, options, caps)
             }
@@ -177,10 +187,21 @@ class AiHandler {
     async handleSelfHeal(options: BrowserstackOptions, browser: WebdriverIO.Browser, tcgUrl: string) {
 
         if ((browser.capabilities as Capabilities.BrowserStackCapabilities)?.browserName?.toLowerCase() === 'firefox') {
-            await this.installFirefoxExtension(browser)
+
+            if (!hasDeviceName(browser.capabilities)) {
+                await this.installFirefoxExtension(browser)
+            } else if (options.selfHeal === true && hasDeviceName(browser.capabilities)) {
+                BStackLogger.warn('Self-healing is not supported for mobile devices')
+                return
+            }
         }
 
-        if (SUPPORTED_BROWSERS_FOR_AI.includes((browser.capabilities as Capabilities.BrowserStackCapabilities)?.browserName?.toLowerCase() as string)) {
+        const browserDetails = {
+            browserName: (browser.capabilities as Capabilities.BrowserStackCapabilities)?.browserName?.toLowerCase() as string,
+            version: (browser.capabilities as Capabilities.BrowserStackCapabilities)?.browserVersion as string
+        }
+
+        if (aiSDK.AISDK.checkExtensionCompatibility(browserDetails)) {
             const authInfo = this.authResult as BrowserstackHealing.InitSuccessResponse
 
             if (Object.keys(authInfo).length === 0 && options.selfHeal === true) {
@@ -262,90 +283,127 @@ class AiHandler {
         }
     }
 
-    async handleNLToStepsStart(userInput: string, browser: any, _accessibilityHandler?: AccessibilityHandler) {
-        if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser.capabilities.browserName)))) {
+    async handleNLToStepsStart(
+        userInput: string,
+        browser: any,
+        tcgUrl: string
+    ): Promise<{ state?: string; value?: any; message: string; success: boolean; }> {
+        const browserDetails = {
+            browserName: browser.capabilities.browserName,
+            version: browser.capabilities.browserVersion
+        }
+        if (!(aiSDK.AISDK.checkExtensionCompatibility(browserDetails))) {
             BStackLogger.warn('Browserstack AI is not supported for this browser')
-            return
+            return { message: 'UNSUPPORTED_BROWSER', success: false }
+        } else if (hasDeviceName(browser.capabilities)) {
+            BStackLogger.warn('Browserstack AI is not supported for mobile devices')
+            return { message: 'UNSUPPORTED_DEVICE', success: false }
         }
 
-        try {
-            let timeoutTimer: NodeJS.Timeout | undefined
+        aiSDK.AISDK.configure({
+            domain: tcgUrl,
+            platform: hasDeviceName(browser.capabilities) ? 'mobile' : 'desktop',
+            connector: 'extension',
+            client: 'webdriverio'
+        })
 
-            const createTimeoutPromise = () => new Promise<never>(() => {
-                timeoutTimer = setTimeout(() => {
-                    throw new Error(
-                        `BrowserStack AI execution timed out after ${TIMEOUT_DURATION / 1000} seconds.`
-                    )
-                }, TIMEOUT_DURATION)
-            })
+        const driverAiReturn = {
+            value: '',
+            success: false,
+            message: 'browser.ai objective pending'
+        }
 
-            const nlToStepsPromise = aiSDK.NLToSteps.start({
-                id: 'webdriverio-' + uuidv4(),
-                objective: userInput,
-                waitCallback: async (waitAction: NLToSteps.NLToStepsWaitAction) => {
-                    console.log('waitAction:', JSON.stringify(waitAction))
+        let timeoutTimer: NodeJS.Timeout | undefined
 
-                    if (timeoutTimer) {
-                        clearTimeout(timeoutTimer)
-                    }
+        const createTimeoutPromise = () => new Promise<never>(() => {
+            timeoutTimer = setTimeout(() => {
+                throw new Error(
+                    `BrowserStack AI execution timed out after ${TIMEOUT_DURATION / 1000} seconds.`
+                )
+            }, TIMEOUT_DURATION)
+        })
 
-                    createTimeoutPromise()
+        const nlToStepsPromise = aiSDK.NLToSteps.start({
+            id: 'webdriverio-' + uuidv4(),
+            objective: userInput,
+            supportedActions: ['referUserToElement'],
+            waitCallback: async (waitAction: NLToSteps.NLToStepsWaitAction) => {
+                console.log('waitAction:', JSON.stringify(waitAction))
 
-                    if (_accessibilityHandler) {
-                        await _accessibilityHandler.validateAccessibility()
-                        // TODO: Add accessibility commandsToWrap logic here
-                    }
-
-                    return true
-                },
-                authMethod: this.getAuthToken,
-                waitAfterActions: true,
-                frameworkImplementation: this.getFrameworkImpl(browser)
-            })
-
-            const out = await Promise.race([
-                nlToStepsPromise,
+                if (timeoutTimer) {
+                    clearTimeout(timeoutTimer)
+                }
                 createTimeoutPromise()
-            ])
 
-            if (timeoutTimer) {
-                clearTimeout(timeoutTimer)
-            }
+                if (waitAction.type === 'STEP') {
+                    const step = waitAction.request as aiSDK.NLToSteps.NLToStepsAction
+                    if (step.action_type === 'referUserToElement') {
+                        if (!driverAiReturn.value && step.element.extracted_value) {
+                            driverAiReturn.value = step.element.extracted_value as string
+                        }
+                    }
+                    return true
+                }
 
-            if (out.state === 'SUCCESS') {
-                BStackLogger.info(`The query has been successfully executed in the ${browser.capabilities.browserName} browser`)
-            } else {
-                BStackLogger.warn(`The query could not be executed in the ${browser.capabilities.browserName} browser. Reason: ${out.message}`)
-            }
+                return true
+            },
+            authMethod: this.getAuthToken,
+            waitAfterActions: true,
+            waitForCustomActions: true,
+            frameworkImplementation: this.getFrameworkImpl(browser)
+        })
 
-            return out
+        const out = await Promise.race([
+            nlToStepsPromise,
+            createTimeoutPromise()
+        ])
 
-        } catch (error: any) {
-            BStackLogger.error('Error in browser.ai: ' + (error.message || error))
+        if (timeoutTimer && out) {
+            clearTimeout(timeoutTimer)
         }
+
+        if (out.state !== 'SUCCESS') {
+            // driverAiReturn.success = false
+            // driverAiReturn.message = out.failReason
+            throw new Error(out.errorName, {
+                cause: out.failReason
+            })
+
+        }
+
+        driverAiReturn.success = true
+        return driverAiReturn
     }
 
-    async testNLToStepsStart(userInput: string, browser: any, caps: Capabilities.RemoteCapability, _accessibilityHandler?: AccessibilityHandler) {
+    async testNLToStepsStart(userInput: string, browser: any, caps: Capabilities.RemoteCapability, tcgUrl: string) {
 
         const multiRemoteBrowsers = Object.keys(caps).filter(e => Object.keys(browser).includes(e))
         if (multiRemoteBrowsers.length > 0) {
-            const result = multiRemoteBrowsers.map(() => ({ state: 'FAILED' }))
+            const result = multiRemoteBrowsers.map(() => ({ success: false, message: 'Execution pending' }))
 
             for (let i = 0; i < multiRemoteBrowsers.length; i++) {
-                if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser as any)[multiRemoteBrowsers[i]].capabilities.browserName))) {
+                const browserDetails = {
+                    browserName: (browser as any)[multiRemoteBrowsers[i]].capabilities.browserName,
+                    version: (browser as any)[multiRemoteBrowsers[i]].capabilities.browserVersion
+                }
+                if (!(aiSDK.AISDK.checkExtensionCompatibility(browserDetails))) {
                     BStackLogger.warn('Browserstack AI is not supported for this browser')
                     return
                 }
-                result[i] = await this.handleNLToStepsStart(userInput, (browser as any)[multiRemoteBrowsers[i]], _accessibilityHandler)
+                result[i] = await this.handleNLToStepsStart(userInput, (browser as any)[multiRemoteBrowsers[i]], tcgUrl)
             }
             return result
         }
 
-        if (!(SUPPORTED_BROWSERS_FOR_AI.includes((browser.capabilities.browserName))) ) {
+        const browserDetails = {
+            browserName: browser.capabilities.browserName,
+            version: browser.capabilities.browserVersion
+        }
+        if (!(aiSDK.AISDK.checkExtensionCompatibility(browserDetails))) {
             BStackLogger.warn('Browserstack AI is not supported for this browser')
             return
         }
-        return await this.handleNLToStepsStart(userInput, browser, _accessibilityHandler)
+        return await this.handleNLToStepsStart(userInput, browser, tcgUrl)
     }
 }
 

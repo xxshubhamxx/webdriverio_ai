@@ -74,15 +74,15 @@ export const SUPPORTED_BROWSERS_FOR_AI = ['chrome', 'microsoftedge', 'firefox']
 
 export const HUB_TCG_MAP: { [key: string]: string }  = {
     'hub-use.browserstack.com': 'https://tcg.browserstack.com',
-    'hub-usw.browserstack.com': 'https://tcg.browserstack.com',
-    'hub-euw.browserstack.com': 'https://tcg.browserstack.com',
-    'hub-aps.browserstack.com': 'https://tcg.browserstack.com',
-    'hub-apse.browserstack.com': 'https://tcg.browserstack.com',
+    'hub-usw.browserstack.com': 'https://tcg-usw.browserstack.com',
+    'hub-euw.browserstack.com': 'https://tcg-euw.browserstack.com',
+    'hub-aps.browserstack.com': 'https://tcg-aps.browserstack.com',
+    'hub-apse.browserstack.com': 'https://tcg-aps.browserstack.com',
     'hub-use-only.browserstack.com': 'https://tcg.browserstack.com',
-    'hub-usw-only.browserstack.com': 'https://tcg.browserstack.com',
-    'hub-euw-only.browserstack.com': 'https://tcg.browserstack.com',
-    'hub-aps-only.browserstack.com': 'https://tcg.browserstack.com',
-    'hub-apse-only.browserstack.com': 'https://tcg.browserstack.com'
+    'hub-usw-only.browserstack.com': 'https://tcg-usw.browserstack.com',
+    'hub-euw-only.browserstack.com': 'https://tcg-euw.browserstack.com',
+    'hub-aps-only.browserstack.com': 'https://tcg-aps.browserstack.com',
+    'hub-apse-only.browserstack.com': 'https://tcg-aps.browserstack.com'
 }
 
 export const TIMEOUT_DURATION = 30000

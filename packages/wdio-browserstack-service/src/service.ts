@@ -2,7 +2,6 @@ import got from 'got'
 import type { OptionsOfJSONResponseBody } from 'got'
 import type { Services, Capabilities, Options, Frameworks } from '@wdio/types'
 import PerformanceTester from './performance-tester.js'
-import aiSDK from '@browserstack/ai-sdk-node'
 import {
     getBrowserDescription,
     getBrowserCapabilities,
@@ -116,21 +115,12 @@ export default class BrowserstackService implements Services.ServiceInstance {
 
         if (!tcgUrl) {
             BStackLogger.warn('Something went wrong. Disabling the AI features')
-        } else {
-
-            aiSDK.AISDK.configure({
-                domain: tcgUrl,
-                platform: this._isAppAutomate() ? 'mobile' : 'desktop',
-            })
-
-            // Healing Support:
-            if (!shouldAddServiceVersion(this._config, this._options.testObservability, caps as any) && tcgUrl) {
-                try {
-                    await AiHandler.selfHeal(this._options, caps, this._browser, tcgUrl)
-                } catch (err) {
-                    if (this._options.selfHeal === true) {
-                        BStackLogger.warn(`Error while setting up self-healing: ${err}. Disabling healing for this session.`)
-                    }
+        } else if (!shouldAddServiceVersion(this._config, this._options.testObservability, caps as any) && tcgUrl) {
+            try {
+                await AiHandler.selfHeal(this._options, caps, this._browser, tcgUrl)
+            } catch (err) {
+                if (this._options.selfHeal === true) {
+                    BStackLogger.warn(`Error while setting up self-healing: ${err}. Disabling healing for this session.`)
                 }
             }
         }
@@ -238,7 +228,7 @@ export default class BrowserstackService implements Services.ServiceInstance {
                 return
             }
 
-            return await AiHandler.testNLToStepsStart(userInput, browser, caps, this._accessibilityHandler)
+            return await AiHandler.testNLToStepsStart(userInput, browser, caps,  tcgUrl)
         })
 
         return await this._printSessionURL()
