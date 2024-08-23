@@ -24,6 +24,7 @@ import Listener from './testOps/listener.js'
 import { saveWorkerData } from './data-store.js'
 import UsageStats from './testOps/usageStats.js'
 import AiHandler from './ai-handler.js'
+import BrowserStackConfig from './config.js'
 
 export default class BrowserstackService implements Services.ServiceInstance {
     private _sessionBaseUrl = 'https://api.browserstack.com/automate/sessions'
@@ -227,8 +228,9 @@ export default class BrowserstackService implements Services.ServiceInstance {
             if (!tcgUrl) {
                 return
             }
+            const browserStackConfig = BrowserStackConfig.getInstance(this._options, this._config)
 
-            return await AiHandler.testNLToStepsStart(userInput, browser, caps,  tcgUrl)
+            return await AiHandler.testNLToStepsStart(userInput, browser, caps,  tcgUrl, browserStackConfig)
         })
 
         return await this._printSessionURL()

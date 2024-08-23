@@ -4,7 +4,7 @@ import url from 'node:url'
 import aiSDK from '@browserstack/ai-sdk-node'
 import { BStackLogger } from './bstackLogger.js'
 import { BSTACK_SERVICE_VERSION, BSTACK_TCG_AUTH_RESULT, HUB_TCG_MAP, BSTACK_TCG_URL, TIMEOUT_DURATION } from './constants.js'
-import { handleHealingInstrumentation } from './instrumentation/funnelInstrumentation.js'
+import { handleHealingInstrumentation, nlToStepsInstrumentation } from './instrumentation/funnelInstrumentation.js'
 import { v4 as uuidv4 } from 'uuid'
 
 import type { Capabilities } from '@wdio/types'
@@ -17,9 +17,11 @@ import type { BrowserstackOptions } from './types.js'
 class AiHandler {
     authResult: BrowserstackHealing.InitSuccessResponse | BrowserstackHealing.InitErrorResponse
     wdioBstackVersion: string
+    timeoutTimer: NodeJS.Timeout | undefined
     constructor() {
         this.authResult = JSON.parse(process.env[BSTACK_TCG_AUTH_RESULT] || '{}')
         this.wdioBstackVersion = BSTACK_SERVICE_VERSION
+        this.timeoutTimer = undefined
     }
 
     async authenticateUser(user: string, key: string) {
@@ -286,7 +288,8 @@ class AiHandler {
     async handleNLToStepsStart(
         userInput: string,
         browser: any,
-        tcgUrl: string
+        tcgUrl: string,
+        config: BrowserStackConfig
     ): Promise<{ state?: string; value?: any; message: string; success: boolean; }> {
         const browserDetails = {
             browserName: browser.capabilities.browserName,
@@ -313,10 +316,10 @@ class AiHandler {
             message: 'browser.ai objective pending'
         }
 
-        let timeoutTimer: NodeJS.Timeout | undefined
-
         const createTimeoutPromise = () => new Promise<never>(() => {
-            timeoutTimer = setTimeout(() => {
+            nlToStepsInstrumentation(config, 'timeout')
+            this.timeoutTimer = setTimeout(() => {
+                BStackLogger.error('BrowserStack AI execution timed out')
                 throw new Error(
                     `BrowserStack AI execution timed out after ${TIMEOUT_DURATION / 1000} seconds.`
                 )
@@ -330,8 +333,8 @@ class AiHandler {
             waitCallback: async (waitAction: NLToSteps.NLToStepsWaitAction) => {
                 console.log('waitAction:', JSON.stringify(waitAction))
 
-                if (timeoutTimer) {
-                    clearTimeout(timeoutTimer)
+                if (this.timeoutTimer) {
+                    clearTimeout(this.timeoutTimer)
                 }
                 createTimeoutPromise()
 
@@ -358,13 +361,12 @@ class AiHandler {
             createTimeoutPromise()
         ])
 
-        if (timeoutTimer && out) {
-            clearTimeout(timeoutTimer)
+        if (this.timeoutTimer && out) {
+            clearTimeout(this.timeoutTimer)
         }
 
         if (out.state !== 'SUCCESS') {
-            // driverAiReturn.success = false
-            // driverAiReturn.message = out.failReason
+            nlToStepsInstrumentation(config, out.failReason)
             throw new Error(out.errorName, {
                 cause: out.failReason
             })
@@ -372,10 +374,11 @@ class AiHandler {
         }
 
         driverAiReturn.success = true
+        driverAiReturn.message = 'browser.ai objective completed'
         return driverAiReturn
     }
 
-    async testNLToStepsStart(userInput: string, browser: any, caps: Capabilities.RemoteCapability, tcgUrl: string) {
+    async testNLToStepsStart(userInput: string, browser: any, caps: Capabilities.RemoteCapability, tcgUrl: string, config: BrowserStackConfig) {
 
         const multiRemoteBrowsers = Object.keys(caps).filter(e => Object.keys(browser).includes(e))
         if (multiRemoteBrowsers.length > 0) {
@@ -390,7 +393,7 @@ class AiHandler {
                     BStackLogger.warn('Browserstack AI is not supported for this browser')
                     return
                 }
-                result[i] = await this.handleNLToStepsStart(userInput, (browser as any)[multiRemoteBrowsers[i]], tcgUrl)
+                result[i] = await this.handleNLToStepsStart(userInput, (browser as any)[multiRemoteBrowsers[i]], tcgUrl, config)
             }
             return result
         }
@@ -403,7 +406,7 @@ class AiHandler {
             BStackLogger.warn('Browserstack AI is not supported for this browser')
             return
         }
-        return await this.handleNLToStepsStart(userInput, browser, tcgUrl)
+        return await this.handleNLToStepsStart(userInput, browser, tcgUrl, config)
     }
 }
 
