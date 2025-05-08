@@ -2,7 +2,6 @@ import got from 'got'
 import type { OptionsOfJSONResponseBody } from 'got'
 import type { Services, Capabilities, Options, Frameworks } from '@wdio/types'
 import PerformanceTester from './performance-tester.js'
-
 import {
     getBrowserDescription,
     getBrowserCapabilities,
@@ -25,6 +24,7 @@ import Listener from './testOps/listener.js'
 import { saveWorkerData } from './data-store.js'
 import UsageStats from './testOps/usageStats.js'
 import AiHandler from './ai-handler.js'
+import BrowserStackConfig from './config.js'
 
 export default class BrowserstackService implements Services.ServiceInstance {
     private _sessionBaseUrl = 'https://api.browserstack.com/automate/sessions'
@@ -112,10 +112,13 @@ export default class BrowserstackService implements Services.ServiceInstance {
         // added to maintain backward compatibility with webdriverIO v5
         this._browser = browser ? browser : globalThis.browser
 
-        // Healing Support:
-        if (!shouldAddServiceVersion(this._config, this._options.testObservability, caps as any)) {
+        const tcgUrl = await AiHandler.getTcgUrl() as string
+
+        if (!tcgUrl) {
+            BStackLogger.warn('Something went wrong. Disabling the AI features')
+        } else if (!shouldAddServiceVersion(this._config, this._options.testObservability, caps as any) && tcgUrl) {
             try {
-                await AiHandler.selfHeal(this._options, caps, this._browser)
+                await AiHandler.selfHeal(this._options, caps, this._browser, tcgUrl)
             } catch (err) {
                 if (this._options.selfHeal === true) {
                     BStackLogger.warn(`Error while setting up self-healing: ${err}. Disabling healing for this session.`)
@@ -214,6 +217,21 @@ export default class BrowserstackService implements Services.ServiceInstance {
                 }
             }
         }
+
+        this._browser.addCommand('ai', async (userInput: string) => {
+
+            if (userInput.trim() === '') {
+                BStackLogger.warn('Please provide a valid input to the AI command')
+                return
+            }
+
+            if (!tcgUrl) {
+                return
+            }
+            const browserStackConfig = BrowserStackConfig.getInstance(this._options, this._config)
+
+            return await AiHandler.testNLToStepsStart(userInput, browser, caps,  tcgUrl, browserStackConfig)
+        })
 
         return await this._printSessionURL()
     }

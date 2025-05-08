@@ -90,6 +90,19 @@ class _AccessibilityHandler {
         this._sessionId = sessionId
         this._accessibility = isTrue(this._getCapabilityValue(this._caps, 'accessibility', 'browserstack.accessibility'))
 
+        const shouldOverwriteCommands = await this.validateAccessibility()
+
+        if (shouldOverwriteCommands && accessibilityScripts && accessibilityScripts.commandsToWrap) {
+            accessibilityScripts.commandsToWrap
+                .filter((command) => command.name && command.class)
+                .forEach((command) => {
+                    const browser = this._browser as WebdriverIO.Browser
+                    browser.overwriteCommand(command.name, this.commandWrapper.bind(this, command), command.class === 'Element')
+                })
+        }
+    }
+
+    public async validateAccessibility(): Promise<boolean> {
         if (isBrowserstackSession(this._browser) && isAccessibilityAutomationSession(this._accessibility)) {
             const deviceName = this._getCapabilityValue(this._caps, 'deviceName', 'device')
             const chromeOptions = this._getCapabilityValue(this._caps, 'goog:chromeOptions', '')
@@ -109,19 +122,9 @@ class _AccessibilityHandler {
             return await performA11yScan((this._browser as WebdriverIO.Browser), isBrowserstackSession(this._browser), this._accessibility)
         }
 
-        if (!this._accessibility) {
-            return
-        }
-        if (!('overwriteCommand' in this._browser && Array.isArray(accessibilityScripts.commandsToWrap))) {
-            return
-        }
-
-        accessibilityScripts.commandsToWrap
-            .filter((command) => command.name && command.class)
-            .forEach((command) => {
-                const browser = this._browser as WebdriverIO.Browser
-                browser.overwriteCommand(command.name, this.commandWrapper.bind(this, command), command.class === 'Element')
-            })
+        return this._accessibility as boolean &&
+               'overwriteCommand' in this._browser &&
+               Array.isArray(accessibilityScripts.commandsToWrap)
     }
 
     async beforeTest (suiteTitle: string | undefined, test: Frameworks.Test) {

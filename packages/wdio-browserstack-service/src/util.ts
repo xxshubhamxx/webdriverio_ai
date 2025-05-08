@@ -1399,19 +1399,50 @@ export const getErrorString = (err: unknown) => {
     }
 }
 
-export const hasBrowserName = (cap: Options.Testrunner): boolean => {
+export const hasProperty = (cap: Options.Testrunner, property: keyof Capabilities.BrowserStackCapabilities): boolean => {
     if (!cap || !cap.capabilities) {
         return false
     }
     const browserStackCapabilities = cap.capabilities as Capabilities.BrowserStackCapabilities
-    return browserStackCapabilities.browserName !== undefined
+    return browserStackCapabilities[property] !== undefined
 }
 
 export const isValidCapsForHealing = (caps: { [key: string]: Options.Testrunner }): boolean => {
-
-    // Get all capability values
     const capValues = Object.values(caps)
+    return capValues.length > 0 && capValues.some(cap => hasProperty(cap, 'browserName'))
+}
 
-    // Check if there are any capabilities and if at least one has a browser name
-    return capValues.length > 0 && capValues.some(hasBrowserName)
+export const hasDeviceName = (caps: { [key: string]: any}): boolean => {
+
+    const capValues = Object.values(caps)
+    const capKeys = Object.keys(caps)
+
+    return capValues.length > 0
+     && (
+        capValues.some(cap => hasProperty(cap, 'deviceName'))
+        || capValues.some(cap => hasProperty(cap, 'appium:deviceName' as keyof Capabilities.BrowserStackCapabilities))
+        || capKeys.includes('deviceName')
+        || capKeys.includes('appium:deviceName')
+    ) as boolean
+}
+
+export const getNextHub = async (): Promise<string | null> => {
+    const url = 'https://hub.browserstack.com/next_hubs'
+
+    try {
+        const response = await got.get(url, {
+            agent: DEFAULT_REQUEST_CONFIG.agent,
+            responseType: 'json'
+        })
+
+        const { hubs } = response.body as { hubs: string[] }
+
+        if (hubs && hubs.length > 0) {
+            return hubs[0]
+        }
+        return null
+
+    } catch (error) {
+        return null
+    }
 }
